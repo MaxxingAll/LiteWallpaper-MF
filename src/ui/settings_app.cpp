@@ -2514,7 +2514,7 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
     g_hWnd = CreateWindowExW(
         WS_EX_LAYERED,
         wc.lpszClassName,
-        L"LiteWallpaper v1.1.0",
+        L"LiteWallpaper v1.2.0",
         WS_OVERLAPPEDWINDOW,
         winX, winY, winW, winH,
         nullptr, nullptr, wc.hInstance, nullptr

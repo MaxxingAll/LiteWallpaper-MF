@@ -64,4 +64,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: LiteWallpaper-Portable-*.zip
-          generate_release_notes: true
+          generate_release_notes: false
+          body: |
+            LiteWallpaper ${{ github.ref_name }} portable for Windows 64-bit.
+
+            How to use: extract the zip file, then run LiteWallpaper.exe. No installer needed.
+            Requires Windows 7 SP1 or newer.

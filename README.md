@@ -6,7 +6,7 @@
 
   **Ultra-Lightweight, High-Performance Animated Video Wallpaper Engine for Windows**
 
-  [![Version](https://img.shields.io/badge/Version-v1.1.0-blue.svg)](https://github.com/f4rdani/LiteWallpaper/releases/tag/v1.1.0)
+  [![Version](https://img.shields.io/badge/Version-v1.2.0-blue.svg)](https://github.com/f4rdani/LiteWallpaper/releases/tag/v1.2.0)
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
   [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=c%2B%2B)](https://en.wikipedia.org/wiki/C%2B%2B20)
   [![DirectX](https://img.shields.io/badge/DirectX-11%20HW%20Accelerated-green.svg)](https://learn.microsoft.com/windows/win32/direct3d11/direct3d-11-graphics)
