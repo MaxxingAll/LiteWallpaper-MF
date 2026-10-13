@@ -417,6 +417,30 @@ static int RunScreensaverMode(HINSTANCE hInstance) {
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpCmdLine, int /*nCmdShow*/) {
+    // DPI awareness agar teks tajam & tidak di-stretch DWM (penting di scaling 125%/150%+).
+    // Aman di semua OS: API dimuat dinamis + fallback berlapis, hasil gagal diabaikan.
+    {
+        bool dpiSet = false;
+        if (HMODULE hU32 = GetModuleHandleW(L"user32.dll")) {
+            using SetCtxFn = BOOL(WINAPI*)(HANDLE); // DPI_AWARENESS_CONTEXT = handle
+            if (auto fn = reinterpret_cast<SetCtxFn>(GetProcAddress(hU32, "SetProcessDpiAwarenessContext"))) {
+                dpiSet = (fn((HANDLE)-4) != FALSE) || (fn((HANDLE)-2) != FALSE); // PerMonitorV2, lalu SystemAware
+            } else {
+                using LegacyFn = BOOL(WINAPI*)();
+                if (auto legacy = reinterpret_cast<LegacyFn>(GetProcAddress(hU32, "SetProcessDPIAware")))
+                    dpiSet = (legacy() != FALSE);
+            }
+        }
+        if (!dpiSet) {
+            if (HMODULE hShcore = LoadLibraryW(L"shcore.dll")) {
+                using SetProcFn = HRESULT(WINAPI*)(int); // 2 = PROCESS_PER_MONITOR_DPI_AWARE
+                if (auto fn = reinterpret_cast<SetProcFn>(GetProcAddress(hShcore, "SetProcessDpiAwareness")))
+                    fn(2);
+                FreeLibrary(hShcore);
+            }
+        }
+    }
+
     // Ultra-low footprint mimalloc tuning:
     // Prevent memory buildup in thread caches and OS page reservations
     mi_option_set(mi_option_arena_eager_commit, 0);       // Disable eager commit of arenas
