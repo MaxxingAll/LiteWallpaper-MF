@@ -22,11 +22,6 @@ jobs:
       - name: Set up MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Install vcpkg Dependencies
-        shell: pwsh
-        run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install nlohmann-json:x64-windows mimalloc:x64-windows "imgui[core,win32-binding,dx11-binding,docking-experimental]:x64-windows"
-
       - name: Download & Setup FFmpeg SDK
         shell: pwsh
         run: |
@@ -38,7 +33,7 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Release -DVCPKG_TARGET_TRIPLET=x64-windows
 
       - name: Build LiteWallpaper
         run: |
