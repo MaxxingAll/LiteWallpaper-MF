@@ -25,7 +25,7 @@ jobs:
       - name: Install vcpkg Dependencies
         shell: pwsh
         run: |
-          vcpkg install nlohmann-json:x64-windows mimalloc:x64-windows "imgui[core,win32-binding,dx11-binding,docking-experimental]:x64-windows"
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install nlohmann-json:x64-windows mimalloc:x64-windows "imgui[core,win32-binding,dx11-binding,docking-experimental]:x64-windows"
 
       - name: Download & Setup FFmpeg SDK
         shell: pwsh
