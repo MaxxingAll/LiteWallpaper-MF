@@ -446,6 +446,74 @@ static void MigrateLegacyAppData() {
     Logger::Info("Migrated legacy LiteWallpaper appdata to MiniWallpaper");
 }
 
+// Rewrite a REG_SZ registry value that still points into the legacy
+// %APPDATA%\LiteWallpaper root, but only when the rewritten target file exists.
+static void FixLegacyRegSzPath(HKEY rootKey, const wchar_t* subKey, const wchar_t* valueName,
+                               const std::wstring& oldRoot, const std::wstring& newRoot) {
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(rootKey, subKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey) != ERROR_SUCCESS) return;
+
+    wchar_t val[1024] = {};
+    DWORD size = sizeof(val);
+    DWORD type = 0;
+    if (RegQueryValueExW(hKey, valueName, nullptr, &type, reinterpret_cast<LPBYTE>(val), &size) == ERROR_SUCCESS && type == REG_SZ) {
+        std::wstring value(val);
+        size_t pos = value.find(oldRoot);
+        if (pos != std::wstring::npos) {
+            std::wstring fixed = value.substr(0, pos) + newRoot + value.substr(pos + oldRoot.size());
+            if (GetFileAttributesW(fixed.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                RegSetValueExW(hKey, valueName, 0, REG_SZ, reinterpret_cast<const BYTE*>(fixed.c_str()),
+                               static_cast<DWORD>((fixed.length() + 1) * sizeof(wchar_t)));
+            }
+        }
+    }
+    RegCloseKey(hKey);
+}
+
+// One-time rebranding migration for registry values that keep absolute paths
+// into the appdata cache: Windows desktop wallpaper image, lock screen image
+// (Lock Screen\Creative + PersonalizationCSP keys) and the companion screensaver
+// binary. Idempotent - safe to run on every startup.
+static void MigrateLegacyRegistryPaths() {
+    wchar_t appDataPath[MAX_PATH] = {};
+    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appDataPath))) return;
+    std::wstring oldRoot = std::wstring(appDataPath) + L"\\LiteWallpaper";
+    std::wstring newRoot = std::wstring(appDataPath) + L"\\MiniWallpaper";
+
+    // Desktop wallpaper image
+    FixLegacyRegSzPath(HKEY_CURRENT_USER, L"Control Panel\\Desktop", L"Wallpaper", oldRoot, newRoot);
+
+    // Screensaver binary: LiteWallpaper.scr -> MiniWallpaper.scr (only if the new file exists)
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\Desktop", 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        wchar_t val[1024] = {};
+        DWORD size = sizeof(val);
+        DWORD type = 0;
+        if (RegQueryValueExW(hKey, L"SCRNSAVE.EXE", nullptr, &type, reinterpret_cast<LPBYTE>(val), &size) == ERROR_SUCCESS && type == REG_SZ) {
+            std::wstring value(val);
+            size_t pos = value.find(L"LiteWallpaper.scr");
+            if (pos != std::wstring::npos) {
+                std::wstring fixed = value.substr(0, pos) + L"MiniWallpaper.scr" + value.substr(pos + wcslen(L"LiteWallpaper.scr"));
+                if (GetFileAttributesW(fixed.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    RegSetValueExW(hKey, L"SCRNSAVE.EXE", 0, REG_SZ, reinterpret_cast<const BYTE*>(fixed.c_str()),
+                                   static_cast<DWORD>((fixed.length() + 1) * sizeof(wchar_t)));
+                }
+            }
+        }
+        RegCloseKey(hKey);
+    }
+
+    // Windows 10/11 lock screen image registries
+    const wchar_t* creativeKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Lock Screen\\Creative";
+    FixLegacyRegSzPath(HKEY_CURRENT_USER, creativeKey, L"LockScreenImage", oldRoot, newRoot);
+    FixLegacyRegSzPath(HKEY_CURRENT_USER, creativeKey, L"LandscapeAssetPath", oldRoot, newRoot);
+    FixLegacyRegSzPath(HKEY_CURRENT_USER, creativeKey, L"PortraitAssetPath", oldRoot, newRoot);
+
+    const wchar_t* cspKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\PersonalizationCSP";
+    FixLegacyRegSzPath(HKEY_CURRENT_USER, cspKey, L"LockScreenImagePath", oldRoot, newRoot);
+    FixLegacyRegSzPath(HKEY_CURRENT_USER, cspKey, L"LockScreenImageUrl", oldRoot, newRoot);
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpCmdLine, int /*nCmdShow*/) {
     // DPI awareness agar teks tajam & tidak di-stretch DWM (penting di scaling 125%/150%+).
     // Aman di semua OS: API dimuat dinamis + fallback berlapis, hasil gagal diabaikan.
@@ -549,6 +617,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
     // One-time rebranding migration from legacy "LiteWallpaper" naming
     // (appdata folder + autostart registry entries + legacy startup shortcut)
     MigrateLegacyAppData();
+    MigrateLegacyRegistryPaths();
     WindowsAutostart::MigrateLegacy();
 
     // 1. Load Configuration
