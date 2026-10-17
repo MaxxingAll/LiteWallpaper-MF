@@ -3356,17 +3356,22 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
 
     g_hInstance = hInstance;
 
+    HICON hIconBig = (HICON)LoadImageW(hInstance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR);
+    HICON hIconSmall = (HICON)LoadImageW(hInstance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
+    if (!hIconBig) hIconBig = LoadIconW(hInstance, MAKEINTRESOURCEW(1));
+    if (!hIconSmall) hIconSmall = hIconBig;
+
     WNDCLASSEXW wc = {
         sizeof(wc),
         CS_CLASSDC,
         SettingsWndProc,
         0L, 0L,
         hInstance,
-        LoadIconW(hInstance, MAKEINTRESOURCEW(1)),
+        hIconBig,
         LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)), // IDC_ARROW
         nullptr, nullptr,
         L"MiniWallpaper_SettingsClass",
-        nullptr
+        hIconSmall
     };
     RegisterClassExW(&wc);
 
@@ -3459,7 +3464,7 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
     }
 
     SendMessageW(g_hWnd, WM_SETICON, ICON_BIG, (LPARAM)wc.hIcon);
-    SendMessageW(g_hWnd, WM_SETICON, ICON_SMALL, (LPARAM)wc.hIcon);
+    SendMessageW(g_hWnd, WM_SETICON, ICON_SMALL, (LPARAM)wc.hIconSm);
 
     BOOL darkMode = TRUE;
     DwmSetWindowAttribute(g_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
@@ -3546,14 +3551,25 @@ static void LoadAppLogoTexture() {
 
     char exePath[MAX_PATH] = {};
     GetModuleFileNameA(nullptr, exePath, MAX_PATH);
-    fs::path iconPath = fs::path(exePath).parent_path() / "assets" / "app_icon.png";
-    if (!fs::exists(iconPath)) {
-        iconPath = fs::path(exePath).parent_path().parent_path() / "assets" / "app_icon.png";
+    fs::path baseDir = fs::path(exePath).parent_path();
+    fs::path iconPath;
+
+    std::vector<fs::path> candidates = {
+        baseDir / "assets" / "miniwallpaper-logo.png",
+        baseDir.parent_path() / "assets" / "miniwallpaper-logo.png",
+        "assets/miniwallpaper-logo.png",
+        baseDir / "assets" / "app_icon.png",
+        baseDir.parent_path() / "assets" / "app_icon.png",
+        "assets/app_icon.png"
+    };
+
+    for (const auto& p : candidates) {
+        if (fs::exists(p)) {
+            iconPath = p;
+            break;
+        }
     }
-    if (!fs::exists(iconPath)) {
-        iconPath = "assets/app_icon.png";
-    }
-    if (!fs::exists(iconPath)) return;
+    if (iconPath.empty() || !fs::exists(iconPath)) return;
 
     HRESULT hrCo = CoInitialize(nullptr);
 
@@ -3576,24 +3592,26 @@ static void LoadAppLogoTexture() {
                                 D3D11_TEXTURE2D_DESC desc = {};
                                 desc.Width = width;
                                 desc.Height = height;
-                                desc.MipLevels = 1;
+                                desc.MipLevels = 0; // generate full mip chain down to 1x1
                                 desc.ArraySize = 1;
                                 desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
                                 desc.SampleDesc.Count = 1;
                                 desc.Usage = D3D11_USAGE_DEFAULT;
-                                desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
-                                D3D11_SUBRESOURCE_DATA initData = {};
-                                initData.pSysMem = pixels.data();
-                                initData.SysMemPitch = stride;
+                                desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+                                desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
 
                                 ComPtr<ID3D11Texture2D> tex;
-                                if (SUCCEEDED(g_pd3dDevice->CreateTexture2D(&desc, &initData, &tex))) {
+                                if (SUCCEEDED(g_pd3dDevice->CreateTexture2D(&desc, nullptr, &tex))) {
+                                    g_pd3dDeviceContext->UpdateSubresource(tex.Get(), 0, nullptr, pixels.data(), stride, 0);
+
                                     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
                                     srvDesc.Format = desc.Format;
                                     srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-                                    srvDesc.Texture2D.MipLevels = 1;
-                                    g_pd3dDevice->CreateShaderResourceView(tex.Get(), &srvDesc, &g_appLogoSRV);
+                                    srvDesc.Texture2D.MostDetailedMip = 0;
+                                    srvDesc.Texture2D.MipLevels = (UINT)-1;
+                                    if (SUCCEEDED(g_pd3dDevice->CreateShaderResourceView(tex.Get(), &srvDesc, &g_appLogoSRV))) {
+                                        g_pd3dDeviceContext->GenerateMips(g_appLogoSRV.Get());
+                                    }
                                 }
                             }
                         }
@@ -3626,7 +3644,7 @@ static void RenderCustomTitleBar(float winWidth, float titleBarH) {
     LoadAppLogoTexture();
     float iconW = 24.0f;
     if (g_appLogoSRV) {
-        float iconSz = 22.0f;
+        float iconSz = 24.0f;
         float iconY = origin.y + (titleBarH - iconSz) * 0.5f;
         dl->AddImageRounded((ImTextureID)g_appLogoSRV.Get(),
             ImVec2(origin.x + leftPad, iconY),

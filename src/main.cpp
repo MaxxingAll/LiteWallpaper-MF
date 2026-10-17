@@ -763,8 +763,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
-    wc.hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(1));
-    wc.hIconSm = LoadIconW(hInstance, MAKEINTRESOURCEW(1));
+    HICON hIconBig = (HICON)LoadImageW(hInstance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR);
+    HICON hIconSm = (HICON)LoadImageW(hInstance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
+    if (!hIconBig) hIconBig = LoadIconW(hInstance, MAKEINTRESOURCEW(1));
+    if (!hIconSm) hIconSm = hIconBig;
+
+    wc.hIcon = hIconBig;
+    wc.hIconSm = hIconSm;
     wc.lpszClassName = L"MiniWallpaper_Daemon";
     RegisterClassExW(&wc);
 
@@ -781,6 +786,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
         vx, vy, vw, vh,
         nullptr, nullptr, hInstance, nullptr
     );
+
+    if (g_main_hwnd) {
+        SendMessageW(g_main_hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+        SendMessageW(g_main_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSm);
+    }
 
     if (!g_main_hwnd) {
         timeEndPeriod(1);
