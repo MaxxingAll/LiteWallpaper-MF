@@ -1460,6 +1460,18 @@ static void RenderGalleryTab() {
 
     // Toolbar tambah/refresh/hapus ada di pill vertikal mengambang sisi kiri.
 
+    const float marginX = 22.0f;       // Spasi dari tepi kiri dan kanan window
+    const float marginTop = 18.0f;     // Spasi dari tepi bawah custom titlebar
+    const float marginBottom = 20.0f;  // Spasi dari tepi bawah window
+
+    ImVec2 winOrigin = ImGui::GetWindowPos();
+    ImVec2 basePos = winOrigin;
+    ImVec2 winSize = ImGui::GetWindowSize();
+    float usableW = winSize.x - marginX * 2.0f;
+    if (usableW < 200.0f) usableW = 200.0f;
+
+    ImVec2 gridRowTop = ImVec2(winOrigin.x + marginX, winOrigin.y + marginTop);
+
     // Multi-Monitor Target Checkboxes in Gallery
     if (!g_hardwareInfoInit) {
         g_hardwareInfo = HardwareDetector::QuerySystemInfo();
@@ -1467,7 +1479,8 @@ static void RenderGalleryTab() {
     }
 
     if (g_hardwareInfo.displays.size() > 1) {
-        BeginModuleCard("MultiMonitorBanner", ImVec2(0, 54.0f), 14.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar, 16.0f, 12.0f);
+        ImGui::SetCursorScreenPos(gridRowTop);
+        BeginModuleCard("MultiMonitorBanner", ImVec2(usableW, 54.0f), 14.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar, 16.0f, 12.0f);
 
         if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
         ImGui::AlignTextToFramePadding();
@@ -1501,7 +1514,7 @@ static void RenderGalleryTab() {
         }
 
         EndModuleCard();
-        ImGui::Spacing();
+        gridRowTop.y += 54.0f + 12.0f;
     }
 
     bool isGalleryEmpty = galleryCopy.empty();
@@ -1522,16 +1535,14 @@ static void RenderGalleryTab() {
     }
     bool showDetail = !isGalleryEmpty && g_detailVisible && g_selectedGalleryIdx >= 0 && g_selectedGalleryIdx < (int)galleryCopy.size();
 
-    float totalAvailW = ImGui::GetContentRegionAvail().x;
-    float gridAvailW = totalAvailW - (showDetail ? (312.0f + 12.0f) : 0.0f);
-    if (gridAvailW < 200.0f) gridAvailW = 200.0f;
-    float gridH = ImGui::GetContentRegionAvail().y - 4.0f;
+    float gridH = (winOrigin.y + winSize.y) - gridRowTop.y - marginBottom;
     if (gridH < 160.0f) gridH = 160.0f;
 
-    ImVec2 gridRowTop = ImGui::GetCursorScreenPos();
+    float gridAvailW = usableW - (showDetail ? (312.0f + 12.0f) : 0.0f);
+    if (gridAvailW < 200.0f) gridAvailW = 200.0f;
 
     if (isGalleryEmpty) {
-        ImGui::SetCursorScreenPos(ImVec2(gridRowTop.x, gridRowTop.y));
+        ImGui::SetCursorScreenPos(gridRowTop);
         BeginModuleCard("GalleryEmpty", ImVec2(gridAvailW, gridH), 18.0f);
         ImVec2 ec = ImGui::GetCursorScreenPos();
         ImVec2 esz = ImGui::GetContentRegionAvail();
@@ -1540,14 +1551,14 @@ static void RenderGalleryTab() {
         ImGui::SetCursorScreenPos(ImVec2(ec.x + (esz.x - ets.x) * 0.5f, ec.y + (esz.y - ets.y) * 0.5f));
         ImGui::TextColored(ImVec4(0.580f, 0.639f, 0.722f, 1.0f), "%s", et);
         EndModuleCard();
-        RenderSidePillOverlay(gridRowTop, gridH);
+        RenderSidePillOverlay(ImVec2(basePos.x, gridRowTop.y), gridH);
         return;
     }
 
     ImGui::SetCursorScreenPos(gridRowTop);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 10.0f));
-    ImGui::BeginChild("GalleryGrid", ImVec2(gridAvailW, gridH), false, 0);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::BeginChild("GalleryGrid", ImVec2(gridAvailW, gridH), false, ImGuiWindowFlags_NoScrollbar);
 
     float availW = ImGui::GetContentRegionAvail().x;
     float cardMinW = 230.0f;
@@ -1740,7 +1751,7 @@ static void RenderGalleryTab() {
         RenderGalleryDetailPanel(selPath, selName, selProbe, selSize, selTW, selTH, selOpt, selHasOpt, selOptimal, selPlayOpt, selPlayOri, selCur, gridH);
     }
     // Pill aksi overlay paling atas (di atas cards).
-    RenderSidePillOverlay(gridRowTop, gridH);
+    RenderSidePillOverlay(ImVec2(basePos.x, gridRowTop.y), gridH);
 }
 
 // Header bar modern & cantik: strip kaca ramping, badge ikon menyala, judul tebal + subjudul inline.

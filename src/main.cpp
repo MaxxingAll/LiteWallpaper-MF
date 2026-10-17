@@ -704,10 +704,29 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
     }
 
     if (!screenshotPath.empty()) {
+        int customW = 0, customH = 0;
+        if (lpCmdLine) {
+            const wchar_t* pw = wcsstr(lpCmdLine, L"--width");
+            if (pw) {
+                pw += 7;
+                while (*pw == L' ' || *pw == L'=' || *pw == L':') pw++;
+                customW = _wtoi(pw);
+            }
+            const wchar_t* ph = wcsstr(lpCmdLine, L"--height");
+            if (ph) {
+                ph += 8;
+                while (*ph == L' ' || *ph == L'=' || *ph == L':') ph++;
+                customH = _wtoi(ph);
+            }
+        }
+
         g_config.Load();
         if (targetPage >= 0) SettingsUI::SetActivePage(targetPage);
         SettingsUI::Open(hInstance);
-        for (int f = 0; f < 25; ++f) {
+        if (customW > 0 && customH > 0 && SettingsUI::GetHwnd()) {
+            SetWindowPos(SettingsUI::GetHwnd(), nullptr, 0, 0, customW, customH, SWP_NOMOVE | SWP_NOZORDER);
+        }
+        for (int f = 0; f < 30; ++f) {
             MSG msg;
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&msg);
