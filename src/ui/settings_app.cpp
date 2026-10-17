@@ -3547,6 +3547,12 @@ static void LoadAppLogoTexture() {
     char exePath[MAX_PATH] = {};
     GetModuleFileNameA(nullptr, exePath, MAX_PATH);
     fs::path iconPath = fs::path(exePath).parent_path() / "assets" / "app_icon.png";
+    if (!fs::exists(iconPath)) {
+        iconPath = fs::path(exePath).parent_path().parent_path() / "assets" / "app_icon.png";
+    }
+    if (!fs::exists(iconPath)) {
+        iconPath = "assets/app_icon.png";
+    }
     if (!fs::exists(iconPath)) return;
 
     HRESULT hrCo = CoInitialize(nullptr);
