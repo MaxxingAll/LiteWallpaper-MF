@@ -3466,6 +3466,67 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
     return true;
 }
 
+static ComPtr<ID3D11ShaderResourceView> g_appLogoSRV;
+
+static void LoadAppLogoTexture() {
+    if (g_appLogoSRV || !g_pd3dDevice) return;
+
+    char exePath[MAX_PATH] = {};
+    GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+    fs::path iconPath = fs::path(exePath).parent_path() / "assets" / "app_icon.png";
+    if (!fs::exists(iconPath)) return;
+
+    HRESULT hrCo = CoInitialize(nullptr);
+
+    ComPtr<IWICImagingFactory> factory;
+    if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)))) {
+        ComPtr<IWICBitmapDecoder> decoder;
+        std::wstring wpath = iconPath.wstring();
+        if (SUCCEEDED(factory->CreateDecoderFromFilename(wpath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder))) {
+            ComPtr<IWICBitmapFrameDecode> frame;
+            if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
+                ComPtr<IWICFormatConverter> converter;
+                if (SUCCEEDED(factory->CreateFormatConverter(&converter))) {
+                    if (SUCCEEDED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom))) {
+                        UINT width = 0, height = 0;
+                        converter->GetSize(&width, &height);
+                        if (width > 0 && height > 0) {
+                            std::vector<uint8_t> pixels(width * height * 4);
+                            UINT stride = width * 4;
+                            if (SUCCEEDED(converter->CopyPixels(nullptr, stride, static_cast<UINT>(pixels.size()), pixels.data()))) {
+                                D3D11_TEXTURE2D_DESC desc = {};
+                                desc.Width = width;
+                                desc.Height = height;
+                                desc.MipLevels = 1;
+                                desc.ArraySize = 1;
+                                desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                                desc.SampleDesc.Count = 1;
+                                desc.Usage = D3D11_USAGE_DEFAULT;
+                                desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+                                D3D11_SUBRESOURCE_DATA initData = {};
+                                initData.pSysMem = pixels.data();
+                                initData.SysMemPitch = stride;
+
+                                ComPtr<ID3D11Texture2D> tex;
+                                if (SUCCEEDED(g_pd3dDevice->CreateTexture2D(&desc, &initData, &tex))) {
+                                    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+                                    srvDesc.Format = desc.Format;
+                                    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                                    srvDesc.Texture2D.MipLevels = 1;
+                                    g_pd3dDevice->CreateShaderResourceView(tex.Get(), &srvDesc, &g_appLogoSRV);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (SUCCEEDED(hrCo)) CoUninitialize();
+}
+
 // Custom Glass Title Bar dengan Minimize, Maximize/Restore, dan Close
 static void RenderCustomTitleBar(float winWidth, float titleBarH) {
     ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -3480,11 +3541,23 @@ static void RenderCustomTitleBar(float winWidth, float titleBarH) {
     // 2. Left brand: App Icon + Name + Version Badge
     float leftPad = 14.0f;
     float textY = origin.y + (titleBarH - ImGui::GetFontSize()) * 0.5f;
-
-    // Cyan glowing app icon
     ImFont* semiboldFont = g_fontSemibold ? g_fontSemibold : ImGui::GetFont();
-    dl->AddText(semiboldFont, ImGui::GetFontSize() * 1.10f, ImVec2(origin.x + leftPad, textY - 1.0f), IM_COL32(56, 232, 255, 255), ICON_FA_DESKTOP);
-    float iconW = ImGui::CalcTextSize(ICON_FA_DESKTOP).x + 10.0f;
+
+    // App logo texture or fallback icon
+    LoadAppLogoTexture();
+    float iconW = 24.0f;
+    if (g_appLogoSRV) {
+        float iconSz = 22.0f;
+        float iconY = origin.y + (titleBarH - iconSz) * 0.5f;
+        dl->AddImageRounded((ImTextureID)g_appLogoSRV.Get(),
+            ImVec2(origin.x + leftPad, iconY),
+            ImVec2(origin.x + leftPad + iconSz, iconY + iconSz),
+            ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, 5.0f);
+        iconW = iconSz + 10.0f;
+    } else {
+        dl->AddText(semiboldFont, ImGui::GetFontSize() * 1.10f, ImVec2(origin.x + leftPad, textY - 1.0f), IM_COL32(56, 232, 255, 255), ICON_FA_DESKTOP);
+        iconW = ImGui::CalcTextSize(ICON_FA_DESKTOP).x + 10.0f;
+    }
 
     // App Name: MiniWallpaper
     float titleX = origin.x + leftPad + iconW;
@@ -3720,6 +3793,7 @@ void SettingsUI::Shutdown() {
     g_isOpen = false;
 
     ThumbnailManager::Instance().ReleaseTextures();
+    g_appLogoSRV.Reset();
 
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
