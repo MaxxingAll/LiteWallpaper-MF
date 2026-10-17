@@ -24,6 +24,7 @@
 #include <imgui_impl_dx11.h>
 
 #include "core/config.h"
+#include "core/logger.h"
 #include "core/ipc_server.h"
 #include "core/engine_state.h"
 #include "core/video_optimizer.h"
@@ -151,9 +152,9 @@ static void SetupImGuiStyle() {
 
     colors[ImGuiCol_Text]                  = ImVec4(0.945f, 0.961f, 0.976f, 1.00f);
     colors[ImGuiCol_TextDisabled]          = ImVec4(0.580f, 0.639f, 0.722f, 1.00f);
-    colors[ImGuiCol_WindowBg]              = ImVec4(0.035f, 0.047f, 0.082f, 0.96f);
-    colors[ImGuiCol_ChildBg]               = ImVec4(0.067f, 0.090f, 0.149f, 0.94f);
-    colors[ImGuiCol_PopupBg]               = ImVec4(0.067f, 0.090f, 0.149f, 0.98f);
+    colors[ImGuiCol_WindowBg]              = ImVec4(0.032f, 0.045f, 0.078f, 0.72f);
+    colors[ImGuiCol_ChildBg]               = ImVec4(0.055f, 0.075f, 0.125f, 0.65f);
+    colors[ImGuiCol_PopupBg]               = ImVec4(0.067f, 0.090f, 0.149f, 0.95f);
     colors[ImGuiCol_Border]                = ImVec4(0.220f, 0.910f, 1.000f, 0.18f);
     colors[ImGuiCol_BorderShadow]          = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_FrameBg]               = ImVec4(0.090f, 0.126f, 0.208f, 1.00f);
@@ -371,6 +372,49 @@ static LRESULT WINAPI SettingsWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
     }
 
     switch (msg) {
+        case WM_NCCALCSIZE: {
+            if (wParam) {
+                if (IsZoomed(hWnd)) {
+                    auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lParam);
+                    HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                    MONITORINFO mi = { sizeof(mi) };
+                    if (GetMonitorInfoW(hMon, &mi)) {
+                        params->rgrc[0] = mi.rcWork;
+                    }
+                }
+                return 0;
+            }
+            return DefWindowProcW(hWnd, msg, wParam, lParam);
+        }
+
+        case WM_NCHITTEST: {
+            if (IsZoomed(hWnd)) return HTCLIENT;
+
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            ScreenToClient(hWnd, &pt);
+            RECT cr;
+            GetClientRect(hWnd, &cr);
+            const int border = 8;
+            bool left = (pt.x < border);
+            bool right = (pt.x >= cr.right - border);
+            bool top = (pt.y < border);
+            bool bottom = (pt.y >= cr.bottom - border);
+
+            // Do not intercept top-right window buttons
+            if (top && pt.x >= cr.right - 145) return HTCLIENT;
+
+            if (top && left) return HTTOPLEFT;
+            if (top && right) return HTTOPRIGHT;
+            if (bottom && left) return HTBOTTOMLEFT;
+            if (bottom && right) return HTBOTTOMRIGHT;
+            if (left) return HTLEFT;
+            if (right) return HTRIGHT;
+            if (bottom) return HTBOTTOM;
+            if (top) return HTTOP;
+
+            return HTCLIENT;
+        }
+
         case WM_SIZE:
             if (g_pd3dDevice != nullptr && wParam != SIZE_MINIMIZED) {
                 CleanupRenderTarget();
@@ -404,8 +448,8 @@ static LRESULT WINAPI SettingsWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 
         case WM_GETMINMAXINFO: {
             auto* mmi = reinterpret_cast<MINMAXINFO*>(lParam);
-            mmi->ptMinTrackSize.x = (LONG)(860 * g_dpiScale);
-            mmi->ptMinTrackSize.y = (LONG)(560 * g_dpiScale);
+            mmi->ptMinTrackSize.x = (LONG)(600 * g_dpiScale);
+            mmi->ptMinTrackSize.y = (LONG)(420 * g_dpiScale);
             return 0;
         }
 
@@ -735,6 +779,7 @@ static bool StarlumeSliderEx(const char* label, float* v, float vmin, float vmax
     ImVec2 dp[4] = { ImVec2(cx, cyy - r), ImVec2(cx + r, cyy), ImVec2(cx, cyy + r), ImVec2(cx - r, cyy) };
     dl->AddConvexPolyFilled(dp, 4, ST_GOLD);
     dl->AddPolyline(dp, 4, ST_BG_BASE, 2.0f, ImDrawFlags_Closed);
+    ImGui::Dummy(ImVec2(w, 2.0f));
     ImGui::PopID();
     return changed;
 }
@@ -874,11 +919,12 @@ static bool BeginModuleCard(const char* id, ImVec2 size, float chamfer = 18.0f, 
     ImU32 border = (state != ST_CARD_NORMAL) ? StAlpha(accent, 0.85f) : StMix(ST_CYAN_LINE, ST_CYAN_EDGE, ht);
     dl->AddPolyline(p, 6, border, (state == ST_CARD_NORMAL) ? 1.2f : 1.6f, ImDrawFlags_Closed);
 
+    ImGuiChildFlags cf = (padX > 0.0f || padY > 0.0f) ? ImGuiChildFlags_AlwaysUseWindowPadding : ImGuiChildFlags_None;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padX, padY));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
-    ImGui::BeginChild(id, sz, ImGuiChildFlags_None, flags);
+    ImGui::BeginChild(id, sz, cf, flags);
     return hovered;
 }
 
@@ -910,82 +956,87 @@ static void StDrawLBrackets(ImDrawList* dl, ImVec2 a, ImVec2 b, float t) {
 struct StGlassCardPending {
     ImGuiID uid;
     bool brackets;
+    bool autoY;
+    float padY;
 };
 static StGlassCardPending g_stGlassPending[8];
 static int g_stGlassPendingN = 0;
 
-// size.y <= 0 → tinggi kartu mengikuti konten (auto-fit child). Latar + bracket
+// size.y <= 0 → tinggi kartu mengikuti konten (auto-fit child). Latar + border
 // digambar di EndGlassCard setelah ukuran child final, jadi auto-height akurat.
-static void BeginGlassCard(const char* id, ImVec2 size, float padX = 22.0f, float padY = 20.0f, ImGuiWindowFlags flags = 0, bool brackets = true) {
+static void BeginGlassCard(const char* id, ImVec2 size, float padX = 20.0f, float padY = 18.0f,
+                           ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse,
+                           bool brackets = false) {
     ImVec2 sz = size;
     ImVec2 avail = ImGui::GetContentRegionAvail();
     if (sz.x <= 0.0f) sz.x = avail.x;
 
-    ImGuiChildFlags cf = ImGuiChildFlags_None;
-    if (sz.y <= 0.0f) cf |= ImGuiChildFlags_AutoResizeY;
+    bool autoY = (sz.y <= 0.0f);
+    // CRITICAL: Dear ImGui 1.90+ defaults non-bordered child windows to WindowPadding=(0,0).
+    // ImGuiChildFlags_AlwaysUseWindowPadding is MANDATORY so that padX and padY are applied to contents!
+    ImGuiChildFlags cf = ImGuiChildFlags_AlwaysUseWindowPadding;
+    if (autoY) cf |= ImGuiChildFlags_AutoResizeY;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padX, padY));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
-    ImGui::BeginChild(id, ImVec2(sz.x, (sz.y > 0.0f) ? sz.y : 0.0f), cf, flags);
+    ImGui::BeginChild(id, ImVec2(sz.x, autoY ? 0.0f : sz.y), cf, flags);
 
     if (g_stGlassPendingN < IM_ARRAYSIZE(g_stGlassPending)) {
         g_stGlassPending[g_stGlassPendingN].uid = ImGui::GetID(id);
         g_stGlassPending[g_stGlassPendingN].brackets = brackets;
+        g_stGlassPending[g_stGlassPendingN].autoY = autoY;
+        g_stGlassPending[g_stGlassPendingN].padY = padY;
         g_stGlassPendingN++;
     }
 }
 
 // Return: tinggi kartu aktual (utk menyusun kartu berikutnya).
 static float EndGlassCard() {
+    ImGuiID uid = 0;
+    bool brackets = false;
+    bool autoY = false;
+    float padY = 18.0f;
+    if (g_stGlassPendingN > 0) {
+        g_stGlassPendingN--;
+        uid = g_stGlassPending[g_stGlassPendingN].uid;
+        brackets = g_stGlassPending[g_stGlassPendingN].brackets;
+        autoY = g_stGlassPending[g_stGlassPendingN].autoY;
+        padY = g_stGlassPending[g_stGlassPendingN].padY;
+    }
+
+    if (autoY) {
+        // Berikan bottom padding agar konten terakhir tidak menempel ke border bawah kartu
+        ImGui::Dummy(ImVec2(0.0f, padY));
+    }
+
     ImGui::EndChild();
     ImVec2 a = ImGui::GetItemRectMin();
     ImVec2 b = ImGui::GetItemRectMax();
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(2);
 
-    ImGuiID uid = 0;
-    bool brackets = true;
-    if (g_stGlassPendingN > 0) {
-        g_stGlassPendingN--;
-        uid = g_stGlassPending[g_stGlassPendingN].uid;
-        brackets = g_stGlassPending[g_stGlassPendingN].brackets;
-    }
-
     bool hovered = ImGui::IsMouseHoveringRect(a, b);
     float ht = AnimTowards(uid ^ 0x61A5u, hovered ? 1.0f : 0.0f, 8.0f);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(a, b, hovered ? ST_GLASS_HOVER : ST_GLASS, 14.0f);
-    dl->AddRect(a, b, StMix(ST_CYAN_LINE, ST_CYAN_EDGE, ht), 14.0f, 0, 1.0f);
+    dl->AddRectFilled(a, b, hovered ? ST_GLASS_HOVER : ST_GLASS, 12.0f);
+    dl->AddRect(a, b, StMix(ST_CYAN_LINE, ST_CYAN_EDGE, ht), 12.0f, 0, 1.0f);
     if (brackets) StDrawLBrackets(dl, a, b, ht);
     return b.y - a.y;
 }
 
-// Header kartu: pill badge cyan (kit) + kode kanan yg redup.
-static void GlassCardHeader(const char* pillText, const char* rightText) {
+// Header kartu: teks judul bersih tanpa background pill dan tanpa kode/tag kanan
+static void GlassCardHeader(const char* titleText) {
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float w = ImGui::GetContentRegionAvail().x;
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 ts = ImGui::CalcTextSize(pillText);
-    float ph = ts.y + 6.0f;
-    float pw = ts.x + 18.0f;
-    ImVec2 pa = pos;
-    ImVec2 pb = ImVec2(pos.x + pw, pos.y + ph);
+    ImFont* headerFont = g_fontSemibold ? g_fontSemibold : ImGui::GetFont();
+    float fsize = ImGui::GetFontSize();
 
-    // Pill / Segmented Switcher (Variant 2): latar pill aktif pink gradient
-    // dengan glow, seperti .st-navbar-pill pada kit Startorch.
-    dl->AddRectFilled(ImVec2(pa.x - 2.0f, pa.y - 2.0f), ImVec2(pb.x + 2.0f, pb.y + 2.0f),
-                      StAlpha(ST_PINK, 0.10f), ph * 0.5f + 2.0f);
-    dl->AddRectFilled(pa, pb, StAlpha(ST_PINK, 0.18f), ph * 0.5f);
-    dl->AddRect(pa, pb, StAlpha(ST_PINK, 0.45f), ph * 0.5f, 0, 1.0f);
-    dl->AddText(ImVec2(pa.x + 9.0f, pa.y + 3.0f), ST_WHITE, pillText);
-
-    if (rightText && rightText[0]) {
-        ImVec2 rs = ImGui::CalcTextSize(rightText);
-        dl->AddText(ImVec2(pos.x + w - rs.x, pos.y + 3.0f), ST_TEXT_DIM, rightText);
-    }
-    ImGui::Dummy(ImVec2(w, ph + 10.0f));
+    // Judul kartu: bersih, elegan tanpa background capsule/card
+    dl->AddText(headerFont, fsize, pos, ST_WHITE, titleText);
+    ImGui::Dummy(ImVec2(w, fsize + 12.0f));
 }
 
 static void TextDim(const char* fmt, ...) {
@@ -1005,40 +1056,34 @@ static std::string StEllipsize(const std::string& s, size_t maxChars) {
 // ---- Telemetry metric tile (Startorch Variant 3: Telemetry Metric) ----
 static void TelemetryTile(const char* id, const char* label, float pct01, const char* valueText, const char* unitText,
                           const char* statusText, ImU32 statusCol, const float* hist5, const char* subText, ImVec2 size) {
+    (void)statusText; (void)statusCol; // Dihapus sesuai permintaan user ("hapus ini" pada status pill)
     pct01 = (std::min)(1.0f, (std::max)(0.0f, pct01));
-    BeginGlassCard(id, size, 20.0f, 18.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse, false);
+    BeginGlassCard(id, size, 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse, false);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     float w = ImGui::GetContentRegionAvail().x;
 
-    // Baris 1: label + status pill (kanan)
+    // Baris 1: label bersih (tanpa pill badge)
     {
         ImVec2 pos = ImGui::GetCursorScreenPos();
         dl->AddText(pos, ST_TEXT_DIM, label);
-        ImVec2 sts = ImGui::CalcTextSize(statusText);
-        float ph = sts.y + 4.0f;
-        ImVec2 pa = ImVec2(pos.x + w - (sts.x + 16.0f), pos.y - 1.0f);
-        ImVec2 pb = ImVec2(pa.x + sts.x + 16.0f, pa.y + ph);
-        dl->AddRectFilled(pa, pb, StAlpha(statusCol, 0.15f), ph * 0.5f);
-        dl->AddRect(pa, pb, StAlpha(statusCol, 0.40f), ph * 0.5f, 0, 1.0f);
-        dl->AddText(ImVec2(pa.x + 8.0f, pa.y + 2.0f), statusCol, statusText);
-        ImGui::Dummy(ImVec2(w, ph + 4.0f));
+        ImGui::Dummy(ImVec2(w, ImGui::GetFontSize() + 6.0f));
     }
 
     // Baris 2: nilai besar + unit + mini sparkbar (riwayat 5 sampel)
     {
         ImVec2 vpos = ImGui::GetCursorScreenPos();
         ImFont* bigFont = g_fontSemibold ? g_fontSemibold : ImGui::GetFont();
-        float bigSize = ImGui::GetFontSize() * 1.6f;
+        float bigSize = ImGui::GetFontSize() * 1.8f;
         dl->AddText(bigFont, bigSize, vpos, ST_WHITE, valueText);
         ImVec2 vsz = bigFont->CalcTextSizeA(bigSize, 10000.0f, 0.0f, valueText);
         if (unitText && unitText[0]) {
-            float uSize = ImGui::GetFontSize() * 0.85f;
+            float uSize = ImGui::GetFontSize() * 0.95f;
             ImVec2 usz = bigFont->CalcTextSizeA(uSize, 10000.0f, 0.0f, unitText);
             dl->AddText(bigFont, uSize, ImVec2(vpos.x + vsz.x + 4.0f, vpos.y + vsz.y - usz.y - 2.0f), ST_CYAN, unitText);
         }
 
         const float barW = 6.0f, barGap = 4.0f;
-        float areaH = (std::max)(20.0f, vsz.y);
+        float areaH = (std::max)(22.0f, vsz.y);
         float ox = vpos.x + w - (barW * 5.0f + barGap * 4.0f);
         for (int i = 0; i < 5; ++i) {
             float v01 = (std::min)(1.0f, (std::max)(0.0f, hist5 ? hist5[i] * 0.01f : 0.0f));
@@ -1047,20 +1092,21 @@ static void TelemetryTile(const char* id, const char* label, float pct01, const 
             ImVec2 bb = ImVec2(ba.x + barW, vpos.y + areaH);
             ImU32 col = (i >= 3) ? ((i == 4) ? ST_PINK : StAlpha(ST_PINK, 0.80f))
                                  : StAlpha(ST_CYAN, (i == 1) ? 0.60f : 0.42f);
-            if (i == 4) dl->AddRectFilled(ImVec2(ba.x - 2.5f, ba.y - 2.5f), ImVec2(bb.x + 2.5f, bb.y + 2.5f), StAlpha(ST_PINK, 0.18f), 4.0f);
+            if (i == 4) dl->AddRectFilled(ImVec2(ba.x - 2.5f, ba.y - 2.5f), ImVec2(bb.x + 2.5f, bb.y + 2.5f), StAlpha(ST_PINK, 0.20f), 4.0f);
             dl->AddRectFilled(ba, bb, col, 2.5f);
         }
-        ImGui::Dummy(ImVec2(w, areaH + 2.0f));
+        ImGui::Dummy(ImVec2(w, areaH + 8.0f));
     }
 
     // Baris 3: sub-info + bar starlume mini
     if (subText && subText[0]) {
         ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ST_TEXT_MUTED), "%s", subText);
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
     }
     {
         ImVec2 a = ImGui::GetCursorScreenPos();
         ImVec2 b = ImVec2(a.x + w, a.y + 6.0f);
-        dl->AddRectFilled(a, b, ST_BG_BASE, 3.0f);
+        dl->AddRectFilled(a, b, IM_COL32(17, 22, 34, 255), 3.0f);
         float fx = a.x + (b.x - a.x) * pct01;
         if (fx > a.x + 2.0f) {
             StGradientStarlume(dl, a, ImVec2(fx, b.y), 3.0f);
@@ -1076,8 +1122,8 @@ static void TelemetryTile(const char* id, const char* label, float pct01, const 
                 dl->PopClipRect();
             }
         }
-        dl->AddRect(a, b, StAlpha(ST_CYAN, 0.22f), 3.0f, 0, 1.0f);
-        ImGui::Dummy(ImVec2(w, 6.0f));
+        dl->AddRect(a, b, StAlpha(ST_CYAN, 0.20f), 3.0f, 0, 1.0f);
+        ImGui::Dummy(ImVec2(w, 8.0f));
     }
     EndGlassCard();
 }
@@ -1095,20 +1141,68 @@ static void RenderFloatingDock() {
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 28.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.035f, 0.047f, 0.082f, 0.92f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.220f, 0.910f, 1.000f, 0.25f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.065f, 0.090f, 0.155f, 0.60f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.220f, 0.910f, 1.000f, 0.35f));
     ImGui::BeginChild("FloatingDock", ImVec2(dockW, dockH), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     {
         static const char* icons[4] = { ICON_FA_IMAGES, ICON_FA_LOCK, ICON_FA_SLIDERS, ICON_FA_GAUGE_HIGH };
         static const char* tips[4] = { "Wallpaper Gallery", "Lock Screen & Static", "General Settings", "Performance & Advanced" };
         ImVec2 dockOrigin = ImGui::GetCursorScreenPos();
         float slotW = (dockW - 20.0f) / 4.0f;
+        float btnW = 52.0f;
+        float btnH = 40.0f;
+
+        // Animasi perpindahan halaman yang sangat halus (smooth sliding pill)
+        static float s_dockAnimPage = -1.0f;
+        if (s_dockAnimPage < 0.0f) {
+            s_dockAnimPage = static_cast<float>(g_activePage);
+        } else {
+            float dt = ImGui::GetIO().DeltaTime;
+            if (dt > 0.05f) dt = 0.05f;
+            float target = static_cast<float>(g_activePage);
+            s_dockAnimPage += (target - s_dockAnimPage) * (1.0f - expf(-18.0f * dt));
+            if (fabsf(s_dockAnimPage - target) < 0.001f) {
+                s_dockAnimPage = target;
+            }
+        }
+
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+
+        // 1. Sliding Glowing Active Capsule
+        float curPillX = dockOrigin.x + s_dockAnimPage * slotW + (slotW - btnW) * 0.5f;
+        float curPillY = dockOrigin.y;
+        ImVec2 a = ImVec2(curPillX, curPillY);
+        ImVec2 b = ImVec2(curPillX + btnW, curPillY + btnH);
+
+        DrawGlowRect(dl, a, b, 16.0f, ST_CYAN, 0.80f);
+        dl->AddRectFilled(a, b, StAlpha(ST_CYAN, 0.22f), 16.0f);
+        dl->AddRect(a, b, StAlpha(ST_CYAN, 0.65f), 16.0f, 0, 1.2f);
+        StGradientBar(dl, ImVec2(a.x + btnW * 0.25f, b.y - 4.0f), ImVec2(b.x - btnW * 0.25f, b.y - 1.5f), 1.25f, StAlpha(ST_CYAN, 0.60f), ST_WHITE);
+
+        // 2. Interactive buttons & icon cross-fading
         for (int i = 0; i < 4; ++i) {
-            ImVec2 bp0 = ImVec2(dockOrigin.x + i * slotW + (slotW - 52.0f) * 0.5f, dockOrigin.y);
-            bool active = (g_activePage == i);
+            ImVec2 bp0 = ImVec2(dockOrigin.x + i * slotW + (slotW - btnW) * 0.5f, dockOrigin.y);
             ImGui::SetCursorScreenPos(bp0);
             char btnId[32]; snprintf(btnId, sizeof(btnId), "##dock%d", i);
-            if (HoloIconButton(btnId, icons[i], 52.0f, 40.0f, 16.0f, false, active, tips[i])) g_activePage = i;
+
+            ImGui::InvisibleButton(btnId, ImVec2(btnW, btnH));
+            bool hov = ImGui::IsItemHovered();
+            bool clk = ImGui::IsItemClicked();
+
+            float dist = (std::min)(1.0f, fabsf(s_dockAnimPage - static_cast<float>(i)));
+            ImU32 iconCol = StMix(ST_WHITE, (hov ? ST_CYAN : ST_TEXT_DIM), dist);
+
+            if (hov && dist > 0.45f) {
+                dl->AddRectFilled(bp0, ImVec2(bp0.x + btnW, bp0.y + btnH), StAlpha(ST_CYAN, 0.08f), 16.0f);
+            }
+
+            ImVec2 isz = ImGui::CalcTextSize(icons[i]);
+            dl->AddText(ImVec2(bp0.x + (btnW - isz.x) * 0.5f, bp0.y + (btnH - isz.y) * 0.5f), iconCol, icons[i]);
+            if (hov && tips[i]) ImGui::SetTooltip("%s", tips[i]);
+
+            if (clk) {
+                g_activePage = i;
+            }
         }
     }
     ImGui::EndChild();
@@ -1116,7 +1210,7 @@ static void RenderFloatingDock() {
     {
         ImDrawList* gdl = ImGui::GetWindowDrawList();
         ImVec2 dMin = ImGui::GetItemRectMin(), dMax = ImGui::GetItemRectMax();
-        gdl->AddLine(ImVec2(dMin.x + 26.0f, dMin.y + 1.5f), ImVec2(dMax.x - 26.0f, dMin.y + 1.5f), IM_COL32(255, 255, 255, 42), 1.0f);
+        gdl->AddLine(ImVec2(dMin.x + 26.0f, dMin.y + 1.5f), ImVec2(dMax.x - 26.0f, dMin.y + 1.5f), IM_COL32(255, 255, 255, 48), 1.0f);
     }
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
@@ -1306,8 +1400,8 @@ static void RenderSidePillOverlay(ImVec2 rowTop, float rowH) {
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 24.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 8.0f));
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.035f, 0.047f, 0.082f, 0.92f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.220f, 0.910f, 1.000f, 0.25f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.078f, 0.110f, 0.180f, 0.62f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.220f, 0.910f, 1.000f, 0.35f));
     ImGui::BeginChild("SideMenuPill", ImVec2(48, sidePillH), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     {
         ImGui::PushID("SideMenu");
@@ -1348,7 +1442,7 @@ static void RenderSidePillOverlay(ImVec2 rowTop, float rowH) {
     {
         ImDrawList* pdl = ImGui::GetWindowDrawList();
         ImVec2 pmn = ImGui::GetItemRectMin(), pmx = ImGui::GetItemRectMax();
-        pdl->AddLine(ImVec2(pmn.x + 14.0f, pmn.y + 1.5f), ImVec2(pmx.x - 14.0f, pmn.y + 1.5f), IM_COL32(56, 232, 255, 46), 1.0f);
+        pdl->AddLine(ImVec2(pmn.x + 14.0f, pmn.y + 1.5f), ImVec2(pmx.x - 14.0f, pmn.y + 1.5f), IM_COL32(56, 232, 255, 65), 1.0f);
     }
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
@@ -1655,11 +1749,13 @@ static void RenderPageTitle(const char* icon, const char* title, const char* des
     ImGui::TextColored(ImVec4(0.96f, 0.97f, 0.99f, 1.0f), "%s  %s", icon, title);
     ImGui::SetWindowFontScale(1.0f);
     if (g_fontSemibold) ImGui::PopFont();
-    if (desc && desc[0] != '\0')
+    if (desc && desc[0] != '\0') {
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
         ImGui::TextColored(ImVec4(0.63f, 0.67f, 0.75f, 1.0f), "%s", desc);
-    ImGui::Spacing();
+    }
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
     ImGui::Separator();
-    ImGui::Spacing();
+    ImGui::Dummy(ImVec2(0.0f, 14.0f));
 }
 
 static void RenderLockscreenTab() {
@@ -1667,15 +1763,28 @@ static void RenderLockscreenTab() {
 
     RenderPageTitle(ICON_FA_LOCK, "Lock Screen & Static", "Configure instant 0s Windows boot visuals and lock screen transitions with zero continuous CPU load.");
 
-    // CARD 1: Windows Desktop Static Wallpaper (0s Instant Boot Visual)
-    BeginModuleCard("DesktopStaticCard", ImVec2(0, 155), 18.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar);
+    float availW = ImGui::GetContentRegionAvail().x;
+    ImVec2 pageStart = ImGui::GetCursorScreenPos();
+    bool isNarrow = (availW < 680.0f);
+    float colGap = 16.0f;
+    float colW = isNarrow ? availW : (availW - colGap) * 0.5f;
+    const float cardPadX = 22.0f;
+    const float cardPadY = 20.0f;
+    float contentW = colW - cardPadX * 2.0f;
 
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.945f, 0.961f, 0.976f, 1.0f), ICON_FA_DESKTOP "  1. Windows Desktop Static Wallpaper (0s Instant Boot Visual)");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
+    float leftX = pageStart.x;
+    float rightX = isNarrow ? pageStart.x : (pageStart.x + colW + colGap);
+    float colY = pageStart.y;
+    float colY2 = isNarrow ? 0.0f : pageStart.y;
 
-    if (ToggleSwitch("Enable Windows Desktop Static Wallpaper", &cfg.update_desktop_wallpaper)) {
+    // ================= KOLOM KIRI =================
+
+    // KARTU 1: Windows Desktop Static Wallpaper (0s Instant Boot Visual)
+    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
+    BeginGlassCard("DesktopStaticCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_DESKTOP "  DESKTOP STATIC WALLPAPER");
+
+    if (ToggleSwitch("Enable Desktop Static Wallpaper", &cfg.update_desktop_wallpaper)) {
         g_config.Save();
         if (cfg.update_desktop_wallpaper) {
             if (cfg.desktop_static_source_mode == 1 && !cfg.desktop_static_video_path.empty()) {
@@ -1696,26 +1805,24 @@ static void RenderLockscreenTab() {
         ImGui::SetTooltip("Injects a high-definition static frame directly into Windows Desktop Wallpaper.\nWhen Windows boots, your desktop appears in 0.0s with no black screen or loading delay.");
     }
 
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
     if (cfg.update_desktop_wallpaper) {
-        ImGui::Indent(18.0f);
         if (cfg.desktop_static_source_mode == 0) {
-            ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.0f), ICON_FA_ROTATE " Active Mode: Auto-Sync (Dynamically follows active live wallpaper)");
+            ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.0f), ICON_FA_ROTATE " Active: Auto-Sync (Live Video)");
         } else {
             fs::path p(cfg.desktop_static_video_path);
             std::string vidName = p.filename().string();
             if (vidName.empty()) vidName = cfg.desktop_static_video_path;
             int curMin = static_cast<int>(cfg.desktop_static_timestamp) / 60;
             float curSec = static_cast<float>(cfg.desktop_static_timestamp) - curMin * 60.0f;
-            ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.0f), ICON_FA_IMAGE " Active Mode: Custom Frame [%s @ %02d:%05.2f]", vidName.c_str(), curMin, curSec);
+            ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.0f), ICON_FA_IMAGE " Custom: %s [%02d:%05.2f]", StEllipsize(vidName, 22).c_str(), curMin, curSec);
 
-            ImGui::SameLine();
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
             if (HoloButtonSmall("Reset to Auto-Sync")) {
                 cfg.desktop_static_source_mode = 0;
                 g_config.Save();
                 SendIpcAsync("{\"cmd\":\"sync_desktop_wallpaper\",\"reset_desktop_auto\":true}");
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Switch back to automatically updating desktop wallpaper with whichever live video is currently playing");
             }
         }
 
@@ -1727,29 +1834,67 @@ static void RenderLockscreenTab() {
             cur_vid = cfg.gallery_history[0];
         }
 
-        if (HoloButton(ICON_FA_CAMERA "  Choose Custom Frame for Desktop...", ImVec2(320, 0))) {
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        if (HoloButton(ICON_FA_CAMERA "  Choose Custom Frame...", ImVec2(contentW, 0))) {
             if (!cur_vid.empty()) {
                 OpenCaptureModal(cur_vid, 1);
             }
         }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Select a specific video and exact timestamp/frame specifically for the Desktop Wallpaper");
-        }
-        ImGui::Unindent(18.0f);
     } else {
-        ImGui::TextDisabled("  Desktop static wallpaper injection is currently disabled.");
+        ImGui::TextDisabled("Desktop static wallpaper is disabled.");
+    }
+    colY += EndGlassCard() + colGap;
+
+    // KARTU 2: Windows Screensaver Integration
+    if (isNarrow) colY = colY;
+    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
+    BeginGlassCard("ScreensaverCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_TV "  SCREENSAVER INTEGRATION");
+
+    static bool scr_checked = false;
+    static bool scr_installed = false;
+    if (!scr_checked) {
+        scr_installed = LockScreenManager::IsScreensaverInstalled();
+        scr_checked = true;
     }
 
-    EndModuleCard();
-    ImGui::Spacing();
+    if (ToggleSwitch("Enable as Windows Screensaver", &scr_installed)) {
+        if (scr_installed) {
+            wchar_t exePathBuf[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
+            std::wstring exePath(exePathBuf);
+            std::wstring scrPath = exePath.substr(0, exePath.find_last_of(L'.')) + L".scr";
+            if (!fs::exists(scrPath)) {
+                CopyFileW(exePath.c_str(), scrPath.c_str(), FALSE);
+            }
+            LockScreenManager::InstallScreensaver(scrPath, 300, true);
+        } else {
+            LockScreenManager::UninstallScreensaver();
+        }
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Plays your live video wallpaper at full 60 FPS when your computer is idle!\nWhen waking the PC, it transitions seamlessly back.");
+    }
 
-    // CARD 2: Windows Lock Screen Wallpaper (Win + L Seamless Transition)
-    BeginModuleCard("LockscreenCard", ImVec2(0, 155), 18.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar);
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    if (HoloButton(ICON_FA_GEAR "  Configure in Windows...", ImVec2(contentW, 0))) {
+        LockScreenManager::OpenWindowsScreensaverSettings();
+    }
 
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.945f, 0.961f, 0.976f, 1.0f), ICON_FA_LOCK "  2. Windows Lock Screen Wallpaper (Win + L Seamless Transition)");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 3.0f));
+    ImGui::TextColored(ImVec4(0.580f, 0.639f, 0.722f, 1.0f), "Plays live wallpaper when idle, waking up immediately on mouse move.");
+    ImGui::PopStyleVar();
+
+    colY += EndGlassCard() + colGap;
+
+    // ================= KOLOM KANAN =================
+
+    // KARTU 3: Windows Lock Screen Wallpaper (Win + L Seamless Transition)
+    if (isNarrow) colY2 = colY;
+    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
+    BeginGlassCard("LockscreenCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_LOCK "  LOCK SCREEN WALLPAPER");
 
     if (ToggleSwitch("Enable Windows Lock Screen Wallpaper", &cfg.update_lockscreen)) {
         g_config.Save();
@@ -1772,26 +1917,24 @@ static void RenderLockscreenTab() {
         ImGui::SetTooltip("Pre-caches a pristine high-definition frame for the Windows Lock Screen.\nWhen pressing Win+L, it displays immediately with 0ms visual delay and 0% background load.");
     }
 
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
     if (cfg.update_lockscreen) {
-        ImGui::Indent(18.0f);
         if (cfg.lockscreen_source_mode == 0) {
-            ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.0f), ICON_FA_ROTATE " Active Mode: Auto-Sync (Dynamically follows active live wallpaper)");
+            ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.0f), ICON_FA_ROTATE " Active: Auto-Sync (Live Video)");
         } else {
             fs::path p(cfg.lockscreen_video_path);
             std::string vidName = p.filename().string();
             if (vidName.empty()) vidName = cfg.lockscreen_video_path;
             int curMin = static_cast<int>(cfg.lockscreen_timestamp) / 60;
             float curSec = static_cast<float>(cfg.lockscreen_timestamp) - curMin * 60.0f;
-            ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.0f), ICON_FA_IMAGE " Active Mode: Custom Frame [%s @ %02d:%05.2f]", vidName.c_str(), curMin, curSec);
+            ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.0f), ICON_FA_IMAGE " Custom: %s [%02d:%05.2f]", StEllipsize(vidName, 22).c_str(), curMin, curSec);
 
-            ImGui::SameLine();
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
             if (HoloButtonSmall("Reset to Auto-Sync")) {
                 cfg.lockscreen_source_mode = 0;
                 g_config.Save();
                 SendIpcAsync("{\"cmd\":\"sync_desktop_wallpaper\",\"reset_lockscreen_auto\":true}");
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Switch back to automatically updating lock screen wallpaper with whichever live video is currently playing");
             }
         }
 
@@ -1803,70 +1946,45 @@ static void RenderLockscreenTab() {
             cur_vid = cfg.gallery_history[0];
         }
 
-        if (HoloButton(ICON_FA_CAMERA "  Choose Custom Frame for Lock Screen...", ImVec2(320, 0))) {
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        if (HoloButton(ICON_FA_CAMERA "  Choose Custom Frame...", ImVec2(contentW, 0))) {
             if (!cur_vid.empty()) {
                 OpenCaptureModal(cur_vid, 2);
             }
         }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Select a specific video and exact timestamp/frame specifically for the Windows Lock Screen");
-        }
-        ImGui::Unindent(18.0f);
     } else {
-        ImGui::TextDisabled("  Windows Lock Screen wallpaper integration is currently disabled.");
+        ImGui::TextDisabled("Lock Screen wallpaper integration is disabled.");
     }
+    colY2 += EndGlassCard() + colGap;
 
-    EndModuleCard();
-    ImGui::Spacing();
+    // KARTU 4: Status & Transition Guide
+    if (isNarrow) colY2 = colY2;
+    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
+    BeginGlassCard("LockscreenInfoCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_CIRCLE_INFO "  SEAMLESS TRANSITIONS STATUS");
 
-    // CARD 3: Windows Screensaver Integration
-    BeginModuleCard("ScreensaverCard", ImVec2(0, 115), 18.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
+    ImGui::TextColored(cfg.update_desktop_wallpaper ? ImVec4(0.22f, 0.91f, 1.00f, 1.0f) : ImVec4(0.58f, 0.64f, 0.72f, 1.0f),
+        "• Desktop Static: %s", cfg.update_desktop_wallpaper ? "ACTIVE (0s Instant Boot)" : "Disabled");
+    ImGui::TextColored(cfg.update_lockscreen ? ImVec4(0.22f, 0.91f, 1.00f, 1.0f) : ImVec4(0.58f, 0.64f, 0.72f, 1.0f),
+        "• Lock Screen: %s", cfg.update_lockscreen ? "ACTIVE (Win + L Seamless)" : "Disabled");
+    ImGui::TextColored(scr_installed ? ImVec4(0.22f, 0.91f, 1.00f, 1.0f) : ImVec4(0.58f, 0.64f, 0.72f, 1.0f),
+        "• Screensaver: %s", scr_installed ? "ACTIVE (60 FPS Idle)" : "Disabled");
+    ImGui::PopStyleVar();
 
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.945f, 0.961f, 0.976f, 1.0f), ICON_FA_TV "  3. Windows Screensaver Integration");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
-
-    static bool scr_checked = false;
-    static bool scr_installed = false;
-    if (!scr_checked) {
-        scr_installed = LockScreenManager::IsScreensaverInstalled();
-        scr_checked = true;
-    }
-
-    if (ToggleSwitch("Enable MiniWallpaper as Windows Screensaver", &scr_installed)) {
-        if (scr_installed) {
-            wchar_t exePathBuf[MAX_PATH] = {};
-            GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
-            std::wstring exePath(exePathBuf);
-            std::wstring scrPath = exePath.substr(0, exePath.find_last_of(L'.')) + L".scr";
-            if (!fs::exists(scrPath)) {
-                CopyFileW(exePath.c_str(), scrPath.c_str(), FALSE);
-            }
-            LockScreenManager::InstallScreensaver(scrPath, 300, true);
-        } else {
-            LockScreenManager::UninstallScreensaver();
-        }
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    if (HoloButton(ICON_FA_ROTATE "  Refresh Static Frames", ImVec2(contentW, 0))) {
+        SendIpcAsync("{\"cmd\":\"sync_desktop_wallpaper\",\"force\":true}");
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Plays your live video wallpaper at full 60 FPS when your computer is idle!\nWhen waking the PC, it transitions seamlessly back.");
+        ImGui::SetTooltip("Immediately re-extracts and refreshes desktop and lock screen images from active video.");
     }
 
-    ImGui::SameLine(0, 16.0f);
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 5.0f);
-    if (HoloButton(ICON_FA_GEAR "  Configure Screensaver...", ImVec2(220, 0))) {
-        LockScreenManager::OpenWindowsScreensaverSettings();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Opens official Windows Screen Saver Settings to adjust idle timeout and resume password.");
-    }
+    colY2 += EndGlassCard() + colGap;
 
-    ImGui::TextColored(ImVec4(0.580f, 0.639f, 0.722f, 1.0f), "Smoothly plays your live wallpaper when idle, waking up immediately upon mouse movement.");
-
-    EndModuleCard();
-
-    // Ruang bawah agar konten tidak tertutup dock yg melayang
-    ImGui::Dummy(ImVec2(1.0f, 72.0f));
+    float finalH = (std::max)(colY, colY2) + 110.0f;
+    ImGui::SetCursorScreenPos(ImVec2(leftX, finalH));
+    ImGui::Dummy(ImVec2(1.0f, 1.0f));
 }
 
 static void RenderGeneralSettingsTab() {
@@ -2101,9 +2219,12 @@ static void RenderPerformancePanel() {
 
     float availW = ImGui::GetContentRegionAvail().x;
     ImVec2 pageStart = ImGui::GetCursorScreenPos();
+    bool isNarrow = (availW < 680.0f);
     float colGap = 16.0f;
-    float colW = (availW - colGap) * 0.5f;
-    float contentW = colW - 36.0f; // konten dalam kartu (padX 18 x 2)
+    float colW = isNarrow ? availW : (availW - colGap) * 0.5f;
+    const float cardPadX = 22.0f;
+    const float cardPadY = 20.0f;
+    float contentW = colW - cardPadX * 2.0f;
 
     // ---- Sampel telemetri (5 titik, kadens ~1 dtk) utk mini sparkbar ----
     static float telemCpu[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
@@ -2139,11 +2260,9 @@ static void RenderPerformancePanel() {
     }
 
     // ================= Baris telemetri (Variant 3: Startorch Telemetry Metric) =================
-    const float tileH = 148.0f;
+    const float tileH = 144.0f;
+    float colTopY = pageStart.y;
     {
-        const float tileGap = 14.0f;
-        float tileW = (availW - tileGap * 2.0f) / 3.0f;
-
         char cpuVal[32];
         char cpuSub[96];
         const char* cpuUnit = "%";
@@ -2200,24 +2319,36 @@ static void RenderPerformancePanel() {
             else { vramStatus = "OPTIMAL"; vramCol = ST_GREEN; }
         }
 
-        TelemetryTile("TelemCPU", "ENGINE CPU LOAD", (std::min)(1.0f, (std::max)(0.0f, curCpu / 100.0f)), cpuVal, cpuUnit, cpuStatus, cpuCol, telemCpu, cpuSub, ImVec2(tileW, tileH));
-        ImGui::SetCursorScreenPos(ImVec2(pageStart.x + tileW + tileGap, pageStart.y));
-        TelemetryTile("TelemRAM", "SYSTEM RAM", (std::min)(1.0f, (std::max)(0.0f, (float)cur_ram / 100.0f)), ramVal, "%", ramStatus, ramCol, telemRam, ramSub, ImVec2(tileW, tileH));
-        ImGui::SetCursorScreenPos(ImVec2(pageStart.x + (tileW + tileGap) * 2.0f, pageStart.y));
-        TelemetryTile("TelemVRAM", "GPU VRAM", vramPct, vramVal, vramUnit, vramStatus, vramCol, telemVram, vramSub, ImVec2(tileW, tileH));
+        if (availW >= 640.0f) {
+            const float tileGap = 14.0f;
+            float tileW = (availW - tileGap * 2.0f) / 3.0f;
+            TelemetryTile("TelemCPU", "ENGINE CPU LOAD", (std::min)(1.0f, (std::max)(0.0f, curCpu / 100.0f)), cpuVal, cpuUnit, cpuStatus, cpuCol, telemCpu, cpuSub, ImVec2(tileW, tileH));
+            ImGui::SetCursorScreenPos(ImVec2(pageStart.x + tileW + tileGap, pageStart.y));
+            TelemetryTile("TelemRAM", "SYSTEM RAM", (std::min)(1.0f, (std::max)(0.0f, (float)cur_ram / 100.0f)), ramVal, "%", ramStatus, ramCol, telemRam, ramSub, ImVec2(tileW, tileH));
+            ImGui::SetCursorScreenPos(ImVec2(pageStart.x + (tileW + tileGap) * 2.0f, pageStart.y));
+            TelemetryTile("TelemVRAM", "GPU VRAM", vramPct, vramVal, vramUnit, vramStatus, vramCol, telemVram, vramSub, ImVec2(tileW, tileH));
+            colTopY = pageStart.y + tileH + 18.0f;
+        } else {
+            // Responsif layar sempit: stack 3 tile secara vertikal
+            TelemetryTile("TelemCPU", "ENGINE CPU LOAD", (std::min)(1.0f, (std::max)(0.0f, curCpu / 100.0f)), cpuVal, cpuUnit, cpuStatus, cpuCol, telemCpu, cpuSub, ImVec2(availW, tileH));
+            ImGui::Dummy(ImVec2(0.0f, 10.0f));
+            TelemetryTile("TelemRAM", "SYSTEM RAM", (std::min)(1.0f, (std::max)(0.0f, (float)cur_ram / 100.0f)), ramVal, "%", ramStatus, ramCol, telemRam, ramSub, ImVec2(availW, tileH));
+            ImGui::Dummy(ImVec2(0.0f, 10.0f));
+            TelemetryTile("TelemVRAM", "GPU VRAM", vramPct, vramVal, vramUnit, vramStatus, vramCol, telemVram, vramSub, ImVec2(availW, tileH));
+            colTopY = ImGui::GetCursorScreenPos().y + 14.0f;
+        }
     }
 
-    float colTopY = pageStart.y + tileH + 16.0f;
     float leftX = pageStart.x;
-    float rightX = pageStart.x + colW + colGap;
+    float rightX = isNarrow ? pageStart.x : (pageStart.x + colW + colGap);
     float colY = colTopY;
 
     // ================= Kolom kiri: kartu kontrol =================
 
     // Kartu 1: Rendering Engine & Frame Rate
     ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
-    BeginGlassCard("PerfEngineCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    GlassCardHeader(ICON_FA_MICROCHIP "  RENDERING ENGINE", "MOD // 01");
+    BeginGlassCard("PerfEngineCard", ImVec2(colW, 0.0f), cardPadX, cardPadY, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_MICROCHIP "  RENDERING ENGINE");
 
     std::vector<std::string> deviceNames;
     std::vector<int> deviceValues;
@@ -2243,29 +2374,48 @@ static void RenderPerformancePanel() {
         comboItems.push_back(name.c_str());
     }
 
-    {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2 lp = ImGui::GetCursorScreenPos();
-        dl->AddText(lp, ST_TEXT_DIM, "Video Rendering Engine");
-        ImGui::Dummy(ImVec2(contentW, ImGui::GetFontSize() + 5.0f));
-    }
+    ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ST_TEXT_DIM), "Video Rendering Engine");
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
     ImGui::SetNextItemWidth(contentW);
+
+    // Custom stylish dropdown: dark slate frame, glowing cyan border, distinct arrow button
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.078f, 0.118f, 0.196f, 0.95f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.110f, 0.165f, 0.270f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.130f, 0.200f, 0.320f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.220f, 0.910f, 1.000f, 0.55f));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.140f, 0.220f, 0.350f, 0.90f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.220f, 0.910f, 1.000f, 0.40f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.220f, 0.910f, 1.000f, 0.70f));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.067f, 0.090f, 0.150f, 0.98f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.2f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 8.0f));
+
     if (ImGui::Combo("##render_engine", &currentDeviceCombo, comboItems.data(), static_cast<int>(comboItems.size()))) {
         cfg.gpu_device_index = deviceValues[currentDeviceCombo];
         g_config.Save();
         nlohmann::json req{{"cmd", "set_render_device"}, {"gpu_index", cfg.gpu_device_index}};
         SendIpcAsync(req.dump());
     }
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(8);
+
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Choose whether video decoding & rendering runs on GPU 1, GPU 2, or CPU Software.");
     }
+
+    ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
     if (StarlumeSliderInt("Target Render FPS", &cfg.target_fps, 15, 60, "", contentW)) {
         g_config.Save();
         nlohmann::json req{{"cmd", "set_fps"}, {"fps", cfg.target_fps}};
         SendIpcAsync(req.dump());
     }
+
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
     ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), ICON_FA_CIRCLE_CHECK "  Active: %d FPS", g_daemonFps);
+
+    ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
     if (StarlumeSliderInt("Battery Saver FPS", &cfg.battery_fps, 10, 30, "", contentW)) {
         g_config.Save();
@@ -2274,8 +2424,8 @@ static void RenderPerformancePanel() {
 
     // Kartu 2: Smart Resource Governor (Gaming & Heavy Load Auto-Sleep)
     ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
-    BeginGlassCard("PerfGovernorCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    GlassCardHeader(ICON_FA_GAUGE_HIGH "  RESOURCE GOVERNOR", "MOD // 02");
+    BeginGlassCard("PerfGovernorCard", ImVec2(colW, 0.0f), cardPadX, cardPadY, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_GAUGE_HIGH "  RESOURCE GOVERNOR");
 
     if (ToggleSwitch("Auto-Sleep on heavy RAM / VRAM load", &cfg.pause_on_resource_heavy)) {
         g_config.Save();
@@ -2285,6 +2435,7 @@ static void RenderPerformancePanel() {
     }
 
     if (cfg.pause_on_resource_heavy) {
+        ImGui::Dummy(ImVec2(0.0f, 14.0f));
         if (StarlumeSliderInt("System RAM Threshold", &cfg.resource_ram_threshold_pct, 60, 95, "%", contentW)) {
             g_config.Save();
         }
@@ -2292,6 +2443,7 @@ static void RenderPerformancePanel() {
             ImGui::SetTooltip("Triggers auto-sleep when overall PC system RAM usage hits this percentage (default 80%).");
         }
 
+        ImGui::Dummy(ImVec2(0.0f, 12.0f));
         if (StarlumeSliderInt("GPU VRAM Threshold", &cfg.resource_vram_threshold_pct, 60, 95, "%", contentW)) {
             g_config.Save();
         }
@@ -2306,9 +2458,11 @@ static void RenderPerformancePanel() {
         snprintf(ram_buf, sizeof(ram_buf), "%d%%  (limit %d%%)", cur_ram, cfg.resource_ram_threshold_pct);
         snprintf(vram_buf, sizeof(vram_buf), "%d%%  (limit %d%%)", cur_vram, cfg.resource_vram_threshold_pct);
 
+        ImGui::Dummy(ImVec2(0.0f, 14.0f));
         StarlumeBar("System RAM Usage", cur_ram / 100.0f, ram_buf, ram_high ? ST_RED : ST_GOLD,
                     ram_high ? ST_RED : ST_PINK_SOFT, cfg.resource_ram_threshold_pct / 100.0f);
 
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
         if (cur_vram > 0) {
             StarlumeBar("GPU VRAM Usage", cur_vram / 100.0f, vram_buf, vram_high ? ST_RED : ST_GOLD,
                         vram_high ? ST_RED : ST_PINK_SOFT, cfg.resource_vram_threshold_pct / 100.0f);
@@ -2317,6 +2471,7 @@ static void RenderPerformancePanel() {
         }
 
         if (is_sleeping) {
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
             ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.00f), ICON_FA_EYE_SLASH "  Auto-Sleep Active: Releasing 100% VRAM & pausing rendering for active game");
         }
     }
@@ -2324,26 +2479,30 @@ static void RenderPerformancePanel() {
 
     // Kartu 3: Video Optimization Transcoding Mode
     ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
-    BeginGlassCard("PerfOptimizerCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    GlassCardHeader(ICON_FA_EXPAND "  TRANSCODING MODE", "MOD // 03");
+    BeginGlassCard("PerfOptimizerCard", ImVec2(colW, 0.0f), cardPadX, cardPadY, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_EXPAND "  TRANSCODING MODE");
 
     if (ImGui::RadioButton("Aspect Fit (Proportional - keeps entire frame)", &cfg.optimizer_crop_mode, 0)) {
         g_config.Save();
     }
-    TextDim("Letterboxes the frame if its ratio differs from your screen.");
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    TextDim("  Letterboxes the frame if its ratio differs from your screen.");
+
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
     if (ImGui::RadioButton("Aspect Fill / Center Crop (zero black bars)", &cfg.optimizer_crop_mode, 1)) {
         g_config.Save();
     }
-    TextDim("Fills the screen exactly, cropping overflow edges.");
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    TextDim("  Fills the screen exactly, cropping overflow edges.");
     colY += EndGlassCard() + colGap;
 
     // ================= Kolom kanan: status & informasi sistem =================
 
     // Kartu 4: Real-Time Engine Status & Telemetry
-    float colY2 = colTopY;
+    float colY2 = isNarrow ? colY : colTopY;
     ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("PerfStatusCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    GlassCardHeader(ICON_FA_CHART_LINE "  ENGINE STATUS", "SYS // 01");
+    BeginGlassCard("PerfStatusCard", ImVec2(colW, 0.0f), cardPadX, cardPadY, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_CHART_LINE "  ENGINE STATUS");
 
     if (!g_daemonConnected) {
         ImGui::TextColored(ImVec4(1.00f, 0.30f, 0.43f, 1.0f), "Background Engine Initializing...");
@@ -2356,28 +2515,34 @@ static void RenderPerformancePanel() {
             ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.75f, 1.00f), ICON_FA_STOP "  Idle");
         }
 
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
         std::string vidName = g_daemonCurrentVideo.empty() ? std::string("(None)") : fs::path(g_daemonCurrentVideo).filename().string();
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
         ImGui::Text("Active Video: %s", StEllipsize(vidName, 34).c_str());
         ImGui::Text("Render: %d FPS  |  Source: %.1f FPS", g_daemonFps, g_daemonVideoFps);
         ImGui::Text("Resolution: %dx%d (%s)", g_daemonWidth, g_daemonHeight, g_daemonCodec.c_str());
         ImGui::Text("Duration: %.1f seconds", g_daemonDuration);
+        ImGui::PopStyleVar();
     }
     colY2 += EndGlassCard() + colGap;
 
     // Kartu 5: Connected Monitors Topology
     size_t dispCount = g_hardwareInfo.displays.size();
     ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("PerfMonitorsCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    GlassCardHeader(ICON_FA_TV "  CONNECTED MONITORS", "SYS // 02");
+    BeginGlassCard("PerfMonitorsCard", ImVec2(colW, 0.0f), cardPadX, cardPadY, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_TV "  CONNECTED MONITORS");
 
     if (HoloButtonSmall(ICON_FA_ROTATE "  RE-DETECT DISPLAYS")) {
         g_hardwareInfo.displays = HardwareDetector::GetDisplayList();
     }
 
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
     if (dispCount == 0) {
         TextDim("No displays enumerated.");
     } else {
         for (size_t idx = 0; idx < dispCount; ++idx) {
+            if (idx > 0) ImGui::Dummy(ImVec2(0.0f, 6.0f));
             const auto& disp = g_hardwareInfo.displays[idx];
             if (disp.is_primary) {
                 ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f),
@@ -2395,12 +2560,14 @@ static void RenderPerformancePanel() {
     // Kartu 6: Hardware Topology (CPU & GPU Detection)
     size_t gpuCount = g_hardwareInfo.gpus.size();
     ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("PerfHardwareCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    GlassCardHeader(ICON_FA_HARD_DRIVE "  HARDWARE TOPOLOGY", "SYS // 03");
+    BeginGlassCard("PerfHardwareCard", ImVec2(colW, 0.0f), cardPadX, cardPadY, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_HARD_DRIVE "  HARDWARE TOPOLOGY");
 
     if (HoloButtonSmall(ICON_FA_ROTATE "  RE-DETECT HARDWARE")) {
         g_hardwareInfo = HardwareDetector::QuerySystemInfo();
     }
+
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
     if (g_daemonActiveGpuIndex == -1) {
         ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f),
@@ -2413,9 +2580,11 @@ static void RenderPerformancePanel() {
                 g_hardwareInfo.cpu.physical_cores, g_hardwareInfo.cpu.logical_cores);
 
     if (gpuCount == 0) {
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
         TextDim("GPU: Standard Display Adapter");
     } else {
         for (size_t g_idx = 0; g_idx < gpuCount; ++g_idx) {
+            ImGui::Dummy(ImVec2(0.0f, 6.0f));
             const auto& gpu = g_hardwareInfo.gpus[g_idx];
             bool is_this_gpu_active = (g_daemonActiveGpuIndex == static_cast<int>(g_idx));
             if (is_this_gpu_active) {
@@ -2436,25 +2605,30 @@ static void RenderPerformancePanel() {
 
     // Kartu 7: Diagnostics & Activity Logs
     ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("PerfDiagCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    GlassCardHeader(ICON_FA_CIRCLE_INFO "  DIAGNOSTICS & LOGS", "SYS // 04");
+    BeginGlassCard("PerfDiagCard", ImVec2(colW, 0.0f), cardPadX, cardPadY, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_CIRCLE_INFO "  DIAGNOSTICS & LOGS");
 
     if (g_daemonInjected) {
         ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), "Desktop Injection (WorkerW): OK");
     } else {
         ImGui::TextColored(ImVec4(1.00f, 0.30f, 0.43f, 1.00f), "Desktop Injection (WorkerW): FAILED");
     }
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
     if (g_daemonActiveGpuIndex == -1 || !g_daemonHwDecode) {
         ImGui::Text("Decoder: Software (CPU swscale)");
     } else {
         ImGui::Text("Decoder: Hardware D3D11VA (HW decode)");
     }
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
     ImGui::Text("Frames Rendered: %llu", (unsigned long long)g_daemonFramesRendered);
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
     if (!g_daemonLastError.empty()) {
         ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Last Error: %s", StEllipsize(g_daemonLastError, 28).c_str());
     } else {
         ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), "Last Error: (none)");
     }
+
+    ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
     {
         float btnW = (contentW - 8.0f) * 0.5f;
@@ -2476,13 +2650,14 @@ static void RenderPerformancePanel() {
             ImGui::SetTooltip("Opens the background engine log in Notepad.");
         }
     }
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
     TextDim("*Cyan flash on the desktop = injection works.");
     colY2 += EndGlassCard() + colGap;
 
     // Akhiri layout 2 kolom: lanjutkan dari kolom terpanjang
     ImGui::SetCursorScreenPos(ImVec2(pageStart.x, (std::max)(colY, colY2)));
     // Ruang bawah agar konten tidak tertutup dock yg melayang
-    ImGui::Dummy(ImVec2(1.0f, 72.0f));
+    ImGui::Dummy(ImVec2(1.0f, 110.0f));
 }
 
 static void RequestCaptureModalPreview() {
@@ -3113,7 +3288,7 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
     int winY = (sh > winH) ? (sh - winH) / 2 : 100;
 
     g_hWnd = CreateWindowExW(
-        WS_EX_LAYERED,
+        WS_EX_APPWINDOW,
         wc.lpszClassName,
         L"MiniWallpaper v2.0.0",
         WS_OVERLAPPEDWINDOW,
@@ -3129,7 +3304,48 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
         return false;
     }
 
-    SetLayeredWindowAttributes(g_hWnd, 0, 235, LWA_ALPHA);
+    // Recalculate frame so WM_NCCALCSIZE strips native caption
+    SetWindowPos(g_hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+
+    // DWM drop shadow & rounded corners (Windows 11)
+    MARGINS margins = { 1, 1, 1, 1 };
+    DwmExtendFrameIntoClientArea(g_hWnd, &margins);
+
+    int corner = 2; // DWMWCP_ROUND
+    DwmSetWindowAttribute(g_hWnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &corner, sizeof(corner));
+
+    // Windows 11 Acrylic blur backdrop
+    int backdrop = 3; // DWMSBT_TRANSIENTWINDOW (Acrylic)
+    DwmSetWindowAttribute(g_hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &backdrop, sizeof(backdrop));
+
+    // Fallback Windows 10 Acrylic/Blur via SetWindowCompositionAttribute
+    typedef enum {
+        ACCENT_DISABLED = 0,
+        ACCENT_ENABLE_GRADIENT = 1,
+        ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+        ACCENT_ENABLE_BLURBEHIND = 3,
+        ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
+        ACCENT_ENABLE_HOSTBACKDROP = 5
+    } ACCENT_STATE;
+    struct ACCENT_POLICY {
+        ACCENT_STATE AccentState;
+        int AccentFlags;
+        unsigned int GradientColor;
+        int AnimationId;
+    };
+    struct WINCOMPATTRDATA {
+        int nAttribute;
+        void* pData;
+        ULONG ulDataSize;
+    };
+    typedef BOOL(WINAPI* pfnSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
+    if (HMODULE hUser = GetModuleHandleW(L"user32.dll")) {
+        if (auto setAttr = (pfnSetWindowCompositionAttribute)GetProcAddress(hUser, "SetWindowCompositionAttribute")) {
+            ACCENT_POLICY policy = { ACCENT_ENABLE_ACRYLICBLURBEHIND, 2, 0x99101826, 0 };
+            WINCOMPATTRDATA data = { 19 /* WCA_ACCENT_POLICY */, &policy, sizeof(policy) };
+            setAttr(g_hWnd, &data);
+        }
+    }
 
     SendMessageW(g_hWnd, WM_SETICON, ICON_BIG, (LPARAM)wc.hIcon);
     SendMessageW(g_hWnd, WM_SETICON, ICON_SMALL, (LPARAM)wc.hIcon);
@@ -3141,7 +3357,7 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
 
     DragAcceptFiles(g_hWnd, TRUE);
 
-    // Liquid glass: blur konten di belakang window (diabaikan bila OS tidak mendukung).
+    // Liquid glass blur behind window (DWM fallback)
     {
         DWM_BLURBEHIND bb = {};
         bb.dwFlags = DWM_BB_ENABLE;
@@ -3212,6 +3428,126 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
     return true;
 }
 
+// Custom Glass Title Bar dengan Minimize, Maximize/Restore, dan Close
+static void RenderCustomTitleBar(float winWidth, float titleBarH) {
+    ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // 1. Sleek glass header background strip
+    ImVec2 b0 = origin;
+    ImVec2 b1 = ImVec2(origin.x + winWidth, origin.y + titleBarH);
+    dl->AddRectFilled(b0, b1, IM_COL32(11, 15, 26, 210));
+    dl->AddLine(ImVec2(b0.x, b1.y - 0.5f), ImVec2(b1.x, b1.y - 0.5f), IM_COL32(56, 232, 255, 38), 1.0f);
+
+    // 2. Left brand: App Icon + Name + Version Badge
+    float leftPad = 14.0f;
+    float textY = origin.y + (titleBarH - ImGui::GetFontSize()) * 0.5f;
+
+    // Cyan glowing app icon
+    ImFont* semiboldFont = g_fontSemibold ? g_fontSemibold : ImGui::GetFont();
+    dl->AddText(semiboldFont, ImGui::GetFontSize() * 1.10f, ImVec2(origin.x + leftPad, textY - 1.0f), IM_COL32(56, 232, 255, 255), ICON_FA_DESKTOP);
+    float iconW = ImGui::CalcTextSize(ICON_FA_DESKTOP).x + 10.0f;
+
+    // App Name: MiniWallpaper
+    float titleX = origin.x + leftPad + iconW;
+    dl->AddText(semiboldFont, ImGui::GetFontSize() * 1.05f, ImVec2(titleX, textY - 1.0f), IM_COL32(245, 248, 252, 255), "MiniWallpaper");
+    float titleW = semiboldFont->CalcTextSizeA(ImGui::GetFontSize() * 1.05f, 1000.0f, 0.0f, "MiniWallpaper").x;
+
+    // Version Pill Badge
+    float badgeX = titleX + titleW + 10.0f;
+    const char* verStr = "v2.0.0";
+    ImVec2 verSz = ImGui::CalcTextSize(verStr);
+    ImVec2 vp0 = ImVec2(badgeX, textY - 1.0f);
+    ImVec2 vp1 = ImVec2(badgeX + verSz.x + 12.0f, vp0.y + verSz.y + 3.0f);
+    dl->AddRectFilled(vp0, vp1, IM_COL32(56, 232, 255, 28), 5.0f);
+    dl->AddRect(vp0, vp1, IM_COL32(56, 232, 255, 75), 5.0f, 0, 1.0f);
+    dl->AddText(ImVec2(vp0.x + 6.0f, vp0.y + 1.0f), IM_COL32(56, 232, 255, 240), verStr);
+
+    float leftTotalW = (vp1.x - origin.x) + 20.0f;
+
+    // 3. Right control buttons: Minimize, Maximize/Restore, Close
+    float btnW = 46.0f;
+    float totalBtnsW = btnW * 3.0f;
+    float btnsStartX = origin.x + winWidth - totalBtnsW;
+
+    // 4. Middle draggable region (between left branding and right buttons)
+    float dragW = btnsStartX - (origin.x + leftTotalW);
+    if (dragW > 20.0f) {
+        ImGui::SetCursorScreenPos(ImVec2(origin.x + leftTotalW, origin.y));
+        ImGui::InvisibleButton("##titlebar_drag", ImVec2(dragW, titleBarH));
+        if (ImGui::IsItemActive() && ImGui::IsMouseClicked(0)) {
+            ReleaseCapture();
+            SendMessageW(g_hWnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        }
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+            if (IsZoomed(g_hWnd)) ShowWindow(g_hWnd, SW_RESTORE);
+            else ShowWindow(g_hWnd, SW_MAXIMIZE);
+        }
+    }
+
+    // 5. Render custom window buttons
+    bool isMax = IsZoomed(g_hWnd);
+    const char* btnIds[3] = { "##win_min", "##win_max", "##win_close" };
+
+    for (int i = 0; i < 3; ++i) {
+        ImVec2 bp0 = ImVec2(btnsStartX + i * btnW, origin.y);
+        ImVec2 bp1 = ImVec2(bp0.x + btnW, origin.y + titleBarH);
+        ImGui::SetCursorScreenPos(bp0);
+        ImGui::InvisibleButton(btnIds[i], ImVec2(btnW, titleBarH));
+        bool hov = ImGui::IsItemHovered();
+        bool act = ImGui::IsItemActive();
+        bool clk = ImGui::IsItemClicked();
+
+        bool isClose = (i == 2);
+        ImU32 bgFill = 0;
+        if (isClose) {
+            if (act) bgFill = IM_COL32(200, 28, 44, 255);
+            else if (hov) bgFill = IM_COL32(232, 28, 48, 225);
+        } else {
+            if (act) bgFill = IM_COL32(255, 255, 255, 36);
+            else if (hov) bgFill = IM_COL32(255, 255, 255, 18);
+        }
+        if (bgFill != 0) {
+            dl->AddRectFilled(bp0, bp1, bgFill);
+        }
+
+        ImU32 iconColor = (isClose && hov) ? IM_COL32_WHITE : (hov ? IM_COL32(255, 255, 255, 240) : IM_COL32(180, 192, 208, 210));
+        ImVec2 center = ImVec2(bp0.x + btnW * 0.5f, origin.y + titleBarH * 0.5f);
+
+        if (i == 0) {
+            // Minimize icon (horizontal bar)
+            dl->AddLine(ImVec2(center.x - 5.0f, center.y), ImVec2(center.x + 5.0f, center.y), iconColor, 1.3f);
+        } else if (i == 1) {
+            // Maximize / Restore icon
+            if (isMax) {
+                // Restore overlapping boxes
+                dl->AddRect(ImVec2(center.x - 3.0f, center.y - 5.0f), ImVec2(center.x + 5.0f, center.y + 3.0f), iconColor, 0.0f, 0, 1.1f);
+                dl->AddRectFilled(ImVec2(center.x - 5.0f, center.y - 3.0f), ImVec2(center.x + 3.0f, center.y + 5.0f), bgFill != 0 ? bgFill : IM_COL32(11, 15, 26, 255));
+                dl->AddRect(ImVec2(center.x - 5.0f, center.y - 3.0f), ImVec2(center.x + 3.0f, center.y + 5.0f), iconColor, 0.0f, 0, 1.1f);
+            } else {
+                // Single square
+                dl->AddRect(ImVec2(center.x - 5.0f, center.y - 5.0f), ImVec2(center.x + 5.0f, center.y + 5.0f), iconColor, 0.0f, 0, 1.3f);
+            }
+        } else if (i == 2) {
+            // Close icon (X)
+            dl->AddLine(ImVec2(center.x - 4.5f, center.y - 4.5f), ImVec2(center.x + 4.5f, center.y + 4.5f), iconColor, 1.4f);
+            dl->AddLine(ImVec2(center.x + 4.5f, center.y - 4.5f), ImVec2(center.x - 4.5f, center.y + 4.5f), iconColor, 1.4f);
+        }
+
+        if (clk) {
+            if (i == 0) ShowWindow(g_hWnd, SW_MINIMIZE);
+            else if (i == 1) {
+                if (isMax) ShowWindow(g_hWnd, SW_RESTORE);
+                else ShowWindow(g_hWnd, SW_MAXIMIZE);
+            } else if (i == 2) {
+                SettingsUI::Close();
+            }
+        }
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(origin.x, origin.y + titleBarH));
+}
+
 void SettingsUI::RenderFrame() {
     if (!g_isOpen || !g_hWnd || !IsWindowVisible(g_hWnd) || !g_pd3dDeviceContext || !g_mainRenderTargetView) return;
 
@@ -3227,6 +3563,12 @@ void SettingsUI::RenderFrame() {
     int winWidth = rect.right - rect.left;
     int winHeight = rect.bottom - rect.top;
 
+    static bool s_firstLog = true;
+    if (s_firstLog) {
+        s_firstLog = false;
+        Logger::Info("RenderFrame: winWidth=", winWidth, " winHeight=", winHeight, " activePage=", g_activePage);
+    }
+
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(winWidth), static_cast<float>(winHeight)));
 
@@ -3236,7 +3578,13 @@ void SettingsUI::RenderFrame() {
                              ImGuiWindowFlags_NoCollapse |
                              ImGuiWindowFlags_NoBringToFrontOnFocus;
 
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::Begin("MiniWallpaper Control Panel", nullptr, flags);
+    ImGui::PopStyleVar(2);
+
+    // 1. Custom Title Bar at the very top (38px height)
+    RenderCustomTitleBar(static_cast<float>(winWidth), 38.0f);
 
     RenderOptimizationProgress();
 
@@ -3245,6 +3593,7 @@ void SettingsUI::RenderFrame() {
     float pageH = pageAvail.y - 2.0f;
     if (pageH < 200.0f) pageH = pageAvail.y > 0 ? pageAvail.y : 200.0f;
     ImGuiWindowFlags pageFlags = (g_activePage == 0) ? (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse) : ImGuiWindowFlags_AlwaysVerticalScrollbar;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f, 16.0f));
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
     ImGui::BeginChild("PageHost", ImVec2(0, pageH), false, pageFlags);
     if (g_activePage == 0) RenderGalleryTab();
@@ -3253,6 +3602,7 @@ void SettingsUI::RenderFrame() {
     else RenderPerformancePanel();
     ImGui::EndChild();
     ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
 
     RenderFloatingDock();
 
@@ -3287,13 +3637,17 @@ void SettingsUI::RenderFrame() {
         ImGui::TextColored(ImVec4(0.580f, 0.639f, 0.722f, 1.0f), "%s", dropSub);
     }
 
+    // Outer glass border around the borderless window
+    ImDrawList* wdl = ImGui::GetWindowDrawList();
+    wdl->AddRect(ImVec2(0, 0), ImVec2(static_cast<float>(winWidth), static_cast<float>(winHeight)), IM_COL32(56, 232, 255, 45), 0.0f, 0, 1.0f);
+
     RenderOptimizeModal();
     RenderCaptureFrameModal();
 
     ImGui::End();
 
     ImGui::Render();
-    const float clearColor[4] = { 0.035f, 0.047f, 0.082f, 0.94f };
+    const float clearColor[4] = { 0.032f, 0.045f, 0.078f, 0.72f };
     g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
     g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clearColor);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -3342,6 +3696,16 @@ void SettingsUI::Shutdown() {
 
 HWND SettingsUI::GetHwnd() {
     return g_hWnd;
+}
+
+void SettingsUI::SetActivePage(int page) {
+    if (page >= 0 && page < 4) {
+        g_activePage = page;
+    }
+}
+
+int SettingsUI::GetActivePage() {
+    return g_activePage;
 }
 
 } // namespace miniwp

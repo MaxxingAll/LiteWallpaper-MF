@@ -615,12 +615,28 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
 
     bool is_silent_boot = (lpCmdLine && (wcsstr(lpCmdLine, L"--startup") != nullptr || wcsstr(lpCmdLine, L"-startup") != nullptr));
 
+    int targetPage = -1;
+    if (lpCmdLine) {
+        const wchar_t* p = wcsstr(lpCmdLine, L"--page");
+        if (!p) p = wcsstr(lpCmdLine, L"-page");
+        if (p) {
+            p += (wcsstr(p, L"--page") == p) ? 6 : 5;
+            while (*p == L' ' || *p == L'=' || *p == L':') p++;
+            if (*p >= L'0' && *p <= L'9') targetPage = _wtoi(p);
+        }
+    }
+    if (targetPage >= 0) {
+        SettingsUI::SetActivePage(targetPage);
+    }
+
     // Single-Instance Check
     HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"MiniWallpaper_SingleInstance_Mutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         if (!is_silent_boot) {
             IpcClient client;
-            client.SendRequest("{\"cmd\":\"open_settings\"}");
+            nlohmann::json r = {{"cmd", "open_settings"}};
+            if (targetPage >= 0) r["page"] = targetPage;
+            client.SendRequest(r.dump());
         }
         if (hMutex) CloseHandle(hMutex);
         return 0;
@@ -1316,6 +1332,9 @@ std::string OnIpcRequest(const std::string& request_json) {
     std::string cmd = req.value("cmd", "");
 
     if (cmd == "open_settings") {
+        if (req.contains("page") && req["page"].is_number_integer()) {
+            SettingsUI::SetActivePage(req["page"].get<int>());
+        }
         if (g_main_hwnd) {
             PostMessageW(g_main_hwnd, WM_APP_OPEN_SETTINGS, 0, 0);
         }
