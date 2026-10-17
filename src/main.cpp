@@ -62,7 +62,7 @@ static bool g_inject_ok = false;
 static bool g_decoder_hw = false;
 static std::string g_last_error;
 static uint64_t g_frames_rendered = 0;
-static int64_t g_flash_until_us = 0; // Diagnostic green-flash window (microseconds)
+static int64_t g_flash_until_us = 0; // Diagnostic flash window (microseconds)
 
 // Playback pacing state
 static double g_video_fps = 0.0;
@@ -993,7 +993,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
 
         if (g_clock.ShouldRenderFrame()) {
             if (g_clock.GetCurrentTimeMicros() < g_flash_until_us) {
-                g_presenter.ClearAndPresent(0.05f, 0.80f, 0.10f);
+                g_presenter.ClearAndPresent(0.22f, 0.91f, 1.00f);
                 g_frames_rendered++;
                 DWORD sleepMs = g_clock.GetSleepDurationMs();
                 HANDLE waitable = g_presenter.GetWaitableObject();

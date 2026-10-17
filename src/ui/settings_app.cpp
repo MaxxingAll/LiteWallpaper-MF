@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <thread>
 #include <cmath>
+#include <unordered_map>
 
 #include <imgui.h>
 #include <imgui_impl_win32.h>
@@ -148,42 +149,47 @@ static void SetupImGuiStyle() {
     style.ItemInnerSpacing  = ImVec2(8.0f, 6.0f);
     style.ScrollbarSize     = 10.0f;
 
-    colors[ImGuiCol_Text]                  = ImVec4(0.93f, 0.94f, 0.96f, 1.00f);
-    colors[ImGuiCol_TextDisabled]          = ImVec4(0.52f, 0.55f, 0.62f, 1.00f);
-    colors[ImGuiCol_WindowBg]              = ImVec4(0.07f, 0.07f, 0.09f, 0.88f);
-    colors[ImGuiCol_ChildBg]               = ImVec4(0.11f, 0.12f, 0.16f, 0.88f);
-    colors[ImGuiCol_PopupBg]               = ImVec4(0.11f, 0.12f, 0.17f, 0.96f);
-    colors[ImGuiCol_Border]                = ImVec4(1.00f, 1.00f, 1.00f, 0.09f);
+    colors[ImGuiCol_Text]                  = ImVec4(0.945f, 0.961f, 0.976f, 1.00f);
+    colors[ImGuiCol_TextDisabled]          = ImVec4(0.580f, 0.639f, 0.722f, 1.00f);
+    colors[ImGuiCol_WindowBg]              = ImVec4(0.035f, 0.047f, 0.082f, 0.96f);
+    colors[ImGuiCol_ChildBg]               = ImVec4(0.067f, 0.090f, 0.149f, 0.94f);
+    colors[ImGuiCol_PopupBg]               = ImVec4(0.067f, 0.090f, 0.149f, 0.98f);
+    colors[ImGuiCol_Border]                = ImVec4(0.220f, 0.910f, 1.000f, 0.18f);
     colors[ImGuiCol_BorderShadow]          = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_FrameBg]               = ImVec4(0.15f, 0.16f, 0.21f, 1.00f);
-    colors[ImGuiCol_FrameBgHovered]        = ImVec4(0.20f, 0.22f, 0.29f, 1.00f);
-    colors[ImGuiCol_FrameBgActive]         = ImVec4(0.24f, 0.28f, 0.37f, 1.00f);
-    colors[ImGuiCol_TitleBg]               = ImVec4(0.07f, 0.07f, 0.09f, 1.00f);
-    colors[ImGuiCol_TitleBgActive]         = ImVec4(0.09f, 0.09f, 0.12f, 1.00f);
-    colors[ImGuiCol_MenuBarBg]             = ImVec4(0.10f, 0.10f, 0.13f, 1.00f);
-    colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.07f, 0.07f, 0.09f, 0.40f);
-    colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.28f, 0.30f, 0.38f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.36f, 0.39f, 0.48f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.44f, 0.48f, 0.58f, 1.00f);
-    colors[ImGuiCol_CheckMark]             = ImVec4(0.30f, 0.60f, 1.00f, 1.00f);
-    colors[ImGuiCol_SliderGrab]            = ImVec4(0.30f, 0.60f, 1.00f, 1.00f);
-    colors[ImGuiCol_SliderGrabActive]      = ImVec4(0.40f, 0.72f, 1.00f, 1.00f);
-    colors[ImGuiCol_Button]                = ImVec4(0.235f, 0.255f, 0.325f, 1.00f);
-    colors[ImGuiCol_ButtonHovered]         = ImVec4(0.30f, 0.325f, 0.415f, 1.00f);
-    colors[ImGuiCol_ButtonActive]          = ImVec4(0.30f, 0.60f, 1.00f, 1.00f);
-    colors[ImGuiCol_Header]                = ImVec4(0.16f, 0.18f, 0.24f, 1.00f);
-    colors[ImGuiCol_HeaderHovered]         = ImVec4(0.23f, 0.27f, 0.36f, 1.00f);
-    colors[ImGuiCol_HeaderActive]          = ImVec4(0.30f, 0.60f, 1.00f, 1.00f);
-    colors[ImGuiCol_Separator]             = ImVec4(1.00f, 1.00f, 1.00f, 0.08f);
-    colors[ImGuiCol_SeparatorHovered]      = ImVec4(0.30f, 0.60f, 1.00f, 0.78f);
-    colors[ImGuiCol_SeparatorActive]       = ImVec4(0.30f, 0.60f, 1.00f, 1.00f);
-    colors[ImGuiCol_Tab]                   = ImVec4(0.11f, 0.11f, 0.14f, 1.00f);
-    colors[ImGuiCol_TabHovered]            = ImVec4(0.20f, 0.24f, 0.32f, 1.00f);
-    colors[ImGuiCol_TabActive]             = ImVec4(0.16f, 0.19f, 0.26f, 1.00f);
-    colors[ImGuiCol_TabUnfocused]          = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);
-    colors[ImGuiCol_TabUnfocusedActive]    = ImVec4(0.11f, 0.11f, 0.14f, 1.00f);
-    colors[ImGuiCol_PlotLines]             = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-    colors[ImGuiCol_PlotLinesHovered]      = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+    colors[ImGuiCol_FrameBg]               = ImVec4(0.090f, 0.126f, 0.208f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered]        = ImVec4(0.122f, 0.165f, 0.267f, 1.00f);
+    colors[ImGuiCol_FrameBgActive]         = ImVec4(0.150f, 0.200f, 0.320f, 1.00f);
+    colors[ImGuiCol_TitleBg]               = ImVec4(0.035f, 0.047f, 0.082f, 1.00f);
+    colors[ImGuiCol_TitleBgActive]         = ImVec4(0.055f, 0.075f, 0.125f, 1.00f);
+    colors[ImGuiCol_MenuBarBg]             = ImVec4(0.067f, 0.090f, 0.149f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.035f, 0.047f, 0.082f, 0.35f);
+    colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.220f, 0.910f, 1.000f, 0.45f);
+    colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.220f, 0.910f, 1.000f, 0.65f);
+    colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.220f, 0.910f, 1.000f, 0.90f);
+    colors[ImGuiCol_CheckMark]             = ImVec4(0.220f, 0.910f, 1.000f, 1.00f);
+    colors[ImGuiCol_SliderGrab]            = ImVec4(0.220f, 0.910f, 1.000f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive]      = ImVec4(0.945f, 0.961f, 0.976f, 1.00f);
+    colors[ImGuiCol_Button]                = ImVec4(0.220f, 0.910f, 1.000f, 0.12f);
+    colors[ImGuiCol_ButtonHovered]         = ImVec4(0.220f, 0.910f, 1.000f, 0.22f);
+    colors[ImGuiCol_ButtonActive]          = ImVec4(0.220f, 0.910f, 1.000f, 0.32f);
+    colors[ImGuiCol_Header]                = ImVec4(0.220f, 0.910f, 1.000f, 0.10f);
+    colors[ImGuiCol_HeaderHovered]         = ImVec4(0.220f, 0.910f, 1.000f, 0.16f);
+    colors[ImGuiCol_HeaderActive]          = ImVec4(0.220f, 0.910f, 1.000f, 0.26f);
+    colors[ImGuiCol_Separator]             = ImVec4(0.220f, 0.910f, 1.000f, 0.14f);
+    colors[ImGuiCol_SeparatorHovered]      = ImVec4(0.220f, 0.910f, 1.000f, 0.55f);
+    colors[ImGuiCol_SeparatorActive]       = ImVec4(0.220f, 0.910f, 1.000f, 0.90f);
+    colors[ImGuiCol_Tab]                   = ImVec4(0.067f, 0.090f, 0.149f, 1.00f);
+    colors[ImGuiCol_TabHovered]            = ImVec4(0.122f, 0.165f, 0.267f, 1.00f);
+    colors[ImGuiCol_TabActive]             = ImVec4(0.100f, 0.140f, 0.230f, 1.00f);
+    colors[ImGuiCol_TabUnfocused]          = ImVec4(0.045f, 0.060f, 0.100f, 1.00f);
+    colors[ImGuiCol_TabUnfocusedActive]    = ImVec4(0.067f, 0.090f, 0.149f, 1.00f);
+    colors[ImGuiCol_PlotLines]             = ImVec4(0.220f, 0.910f, 1.000f, 1.00f);
+    colors[ImGuiCol_PlotLinesHovered]      = ImVec4(1.000f, 0.820f, 0.400f, 1.00f);
+    colors[ImGuiCol_PlotHistogram]         = ImVec4(0.220f, 0.910f, 1.000f, 1.00f);
+    colors[ImGuiCol_PlotHistogramHovered]  = ImVec4(1.000f, 0.820f, 0.400f, 1.00f);
+    colors[ImGuiCol_NavHighlight]          = ImVec4(0.220f, 0.910f, 1.000f, 0.80f);
+    colors[ImGuiCol_NavWindowingDimBg]     = ImVec4(0.020f, 0.030f, 0.060f, 0.55f);
+    colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.020f, 0.030f, 0.060f, 0.62f);
 }
 
 static void CreateRenderTarget() {
@@ -456,6 +462,435 @@ static void DrawFloatingShadow(ImVec2 p0, ImVec2 p1, float rounding) {
     dl->AddRectFilled(ImVec2(p0.x - 3.0f, p0.y - 1.0f), ImVec2(p1.x + 3.0f, p1.y + 5.0f), IM_COL32(0, 0, 0, 42), rounding + 3.0f);
 }
 
+// =========================================================================
+// STARTORCH UI KIT (MiniWallpaper edition) — atomic widgets
+// Palet: biru → putih (+ aksen gold & merah). Tanpa emoji/glyph dekoratif.
+// =========================================================================
+#define ST_BG_BASE     IM_COL32(9, 12, 21, 255)
+#define ST_PANEL       IM_COL32(17, 23, 38, 245)
+#define ST_PANEL_ELEV  IM_COL32(23, 32, 53, 255)
+#define ST_GLASS       IM_COL32(20, 28, 46, 235)
+#define ST_GLASS_HOVER IM_COL32(29, 41, 66, 244)
+#define ST_CYAN        IM_COL32(56, 232, 255, 255)
+#define ST_WHITE       IM_COL32(241, 245, 249, 255)
+#define ST_TEXT        IM_COL32(241, 245, 249, 255)
+#define ST_TEXT_DIM    IM_COL32(148, 163, 184, 255)
+#define ST_TEXT_MUTED  IM_COL32(100, 116, 139, 255)
+#define ST_GOLD        IM_COL32(255, 209, 102, 255)
+#define ST_RED         IM_COL32(255, 77, 109, 255)
+#define ST_CYAN_LINE   IM_COL32(56, 232, 255, 46)
+#define ST_CYAN_EDGE   IM_COL32(56, 232, 255, 107)
+
+static ImU32 StAlpha(ImU32 col, float a) {
+    ImVec4 f = ImGui::ColorConvertU32ToFloat4(col);
+    f.w = a;
+    return ImGui::ColorConvertFloat4ToU32(f);
+}
+
+static ImU32 StMix(ImU32 a, ImU32 b, float t) {
+    ImVec4 ca = ImGui::ColorConvertU32ToFloat4(a);
+    ImVec4 cb = ImGui::ColorConvertU32ToFloat4(b);
+    return ImGui::ColorConvertFloat4ToU32(ImVec4(
+        ca.x + (cb.x - ca.x) * t, ca.y + (cb.y - ca.y) * t,
+        ca.z + (cb.z - ca.z) * t, ca.w + (cb.w - ca.w) * t));
+}
+
+// Animasi nilai per-widget (hover/toggle lerp) berbasis ID widget.
+static std::unordered_map<ImGuiID, float> g_animFloats;
+static float AnimTowards(ImGuiID key, float target, float speed) {
+    float& v = g_animFloats[key];
+    float dt = ImGui::GetIO().DeltaTime;
+    if (dt <= 0.0f || dt > 0.2f) dt = 1.0f / 60.0f;
+    float step = speed * dt;
+    if (target > v) v = (target - v < step) ? target : v + step;
+    else if (target < v) v = (v - target < step) ? target : v - step;
+    return v;
+}
+
+// Bar gradien horizontal dgn ujung membulat (cap solid + body gradien, seamless).
+static void StGradientBar(ImDrawList* dl, ImVec2 a, ImVec2 b, float rounding, ImU32 leftCol, ImU32 rightCol) {
+    float w = b.x - a.x;
+    if (w <= 1.0f) return;
+    float r = rounding;
+    if (w < r * 3.0f) {
+        dl->AddRectFilled(a, b, leftCol, r);
+        return;
+    }
+    dl->AddRectFilled(a, ImVec2(a.x + r * 2.0f, b.y), leftCol, r, ImDrawFlags_RoundCornersLeft);
+    dl->AddRectFilled(ImVec2(b.x - r * 2.0f, a.y), b, rightCol, r, ImDrawFlags_RoundCornersRight);
+    dl->AddRectFilledMultiColor(ImVec2(a.x + r, a.y), ImVec2(b.x - r, b.y), leftCol, rightCol, rightCol, leftCol);
+}
+
+// Glow lembut utk rounded-rect (digambar di belakang shape).
+static void DrawGlowRect(ImDrawList* dl, ImVec2 a, ImVec2 b, float rounding, ImU32 color, float strength) {
+    if (strength <= 0.01f) return;
+    for (int i = 3; i >= 1; --i) {
+        float off = (float)i * 2.2f;
+        dl->AddRectFilled(ImVec2(a.x - off, a.y - off), ImVec2(b.x + off, b.y + off),
+                          StAlpha(color, 0.06f * strength / (float)i), rounding + off);
+    }
+}
+
+// Sweep shine (Startorch Holo): band menyala melintas sekali saat hover.
+static void StDrawSweep(ImDrawList* dl, ImVec2 a, ImVec2 b, float progress, ImU32 color) {
+    float w = b.x - a.x;
+    if (w <= 2.0f || progress < 0.0f || progress > 1.0f) return;
+    float bw = w * 0.42f;
+    float bx = a.x - bw + (w + 2.0f * bw) * progress;
+    dl->PushClipRect(a, b, true);
+    ImU32 peak = StAlpha(color, 0.32f);
+    ImU32 none = StAlpha(color, 0.0f);
+    dl->AddRectFilledMultiColor(ImVec2(bx, a.y), ImVec2(bx + bw * 0.5f, b.y), none, peak, peak, none);
+    dl->AddRectFilledMultiColor(ImVec2(bx + bw * 0.5f, a.y), ImVec2(bx + bw, b.y), peak, none, none, peak);
+    dl->PopClipRect();
+}
+
+// ---- Tombol Holo (Startorch Variant 2: Secondary Holo + Sweep) ----
+static bool HoloButtonEx(const char* label, ImVec2 size, bool danger, bool compact) {
+    std::string txt(label ? label : "");
+    for (auto& c : txt) if (c >= 'a' && c <= 'z') c = (char)(c - 32); // uppercase ASCII; byte UTF-8 (ikon) aman
+
+    ImFont* font = ImGui::GetFont();
+    float fs = ImGui::GetFontSize() + (compact ? 0.0f : 0.5f);
+    ImVec2 tsz = font->CalcTextSizeA(fs, 10000.0f, 0.0f, txt.c_str());
+    float h = compact ? 27.0f : 36.0f;
+    float padX = compact ? 11.0f : 17.0f;
+    if (size.x > 0.0f) size.x = (std::max)(size.x, tsz.x + padX * 2.0f);
+    else size.x = tsz.x + padX * 2.0f;
+    if (size.y > 0.0f) h = size.y;
+
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImGuiID id = ImGui::GetID(label ? label : "");
+    ImGui::InvisibleButton(label ? label : "##btn", ImVec2(size.x, h));
+    bool hovered = ImGui::IsItemHovered();
+    bool clicked = ImGui::IsItemClicked();
+    float ht = AnimTowards(id ^ 0x4857u, hovered ? 1.0f : 0.0f, 10.0f);
+
+    float& sw = g_animFloats[id ^ 0x5357u];
+    if (!hovered) sw = -1.0f;
+    else if (sw < 0.0f) sw = 0.0f;
+    if (sw >= 0.0f && sw < 1.0f) {
+        sw += ImGui::GetIO().DeltaTime / 0.55f;
+        if (sw > 1.0f) sw = 1.0f;
+    }
+
+    float lift = ht * 2.0f;
+    ImVec2 a = ImVec2(pos.x, pos.y - lift);
+    ImVec2 b = ImVec2(pos.x + size.x, pos.y + h - lift);
+    ImU32 accent = danger ? ST_RED : ST_CYAN;
+    ImU32 fill = StAlpha(accent, (danger ? 0.15f : 0.09f) + (danger ? 0.22f : 0.10f) * ht);
+    ImU32 border = StAlpha(accent, 0.42f + 0.58f * ht);
+    ImU32 txtCol = StMix(accent, ST_WHITE, 0.35f + 0.45f * ht);
+    float round = compact ? 8.0f : 10.0f;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (ht > 0.01f) DrawGlowRect(dl, a, b, round, accent, ht);
+    dl->AddRectFilled(a, b, fill, round);
+    if (sw >= 0.0f && sw <= 1.0f) StDrawSweep(dl, a, b, sw, accent);
+    dl->AddRect(a, b, border, round, 0, ht > 0.45f ? 1.5f : 1.1f);
+
+    ImVec2 tp = ImVec2(a.x + (size.x - tsz.x) * 0.5f, a.y + (h - tsz.y) * 0.5f);
+    dl->AddText(font, fs, tp, txtCol, txt.c_str());
+    return clicked;
+}
+
+static bool HoloButton(const char* label, ImVec2 size = ImVec2(0, 0)) { return HoloButtonEx(label, size, false, false); }
+static bool HoloDangerButton(const char* label, ImVec2 size = ImVec2(0, 0)) { return HoloButtonEx(label, size, true, false); }
+static bool HoloButtonSmall(const char* label) { return HoloButtonEx(label, ImVec2(0, 0), false, true); }
+static bool HoloDangerButtonSmall(const char* label) { return HoloButtonEx(label, ImVec2(0, 0), true, true); }
+
+// ---- Slot ikon (dock & pill): gaya segmented-pill, tanpa teks ----
+static bool HoloIconButton(const char* id, const char* icon, float w, float h, float rounding, bool danger, bool active, const char* tooltip) {
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImGuiID uid = ImGui::GetID(id);
+    ImGui::InvisibleButton(id, ImVec2(w, h));
+    bool hovered = ImGui::IsItemHovered();
+    bool clicked = ImGui::IsItemClicked();
+    float ht = AnimTowards(uid ^ 0x1C07u, hovered ? 1.0f : 0.0f, 12.0f);
+
+    ImU32 accent = danger ? ST_RED : ST_CYAN;
+    ImVec2 a = pos, b = ImVec2(pos.x + w, pos.y + h);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    if (active) {
+        DrawGlowRect(dl, a, b, rounding, accent, 0.9f);
+        dl->AddRectFilled(a, b, StAlpha(accent, 0.22f), rounding);
+        dl->AddRect(a, b, StAlpha(accent, 0.60f), rounding, 0, 1.2f);
+        StGradientBar(dl, ImVec2(a.x + w * 0.28f, b.y - 4.0f), ImVec2(b.x - w * 0.28f, b.y - 1.5f), 1.25f, StAlpha(accent, 0.55f), ST_WHITE);
+    } else if (ht > 0.01f) {
+        dl->AddRectFilled(a, b, StAlpha(accent, 0.10f * ht), rounding);
+        dl->AddRect(a, b, StAlpha(accent, 0.35f * ht), rounding, 0, 1.0f);
+    }
+
+    ImU32 fg = active ? ST_WHITE : StMix(ST_TEXT_DIM, accent, ht);
+    ImVec2 tsz = ImGui::CalcTextSize(icon);
+    dl->AddText(ImVec2(a.x + (w - tsz.x) * 0.5f, a.y + (h - tsz.y) * 0.5f), fg, icon);
+    if (hovered && tooltip) ImGui::SetTooltip("%s", tooltip);
+    return clicked;
+}
+
+// ---- Toggle switch (pengganti checkbox) ----
+static bool ToggleSwitch(const char* label, bool* v) {
+    const float w = 48.0f, h = 26.0f, gap = 10.0f;
+    bool hasLabel = (label && label[0] != '\0');
+    ImVec2 tsz = hasLabel ? ImGui::CalcTextSize(label) : ImVec2(0, 0);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    float totalW = w + (hasLabel ? gap + tsz.x : 0.0f);
+    ImGuiID id = ImGui::GetID(hasLabel ? label : "##tgl");
+    ImGui::InvisibleButton(hasLabel ? label : "##tgl", ImVec2(totalW, h));
+    bool hovered = ImGui::IsItemHovered();
+    bool clicked = ImGui::IsItemClicked();
+    if (clicked) *v = !(*v);
+    float t = AnimTowards(id ^ 0x70B5u, *v ? 1.0f : 0.0f, 13.0f);
+    float hov = AnimTowards(id ^ 0x70B6u, hovered ? 1.0f : 0.0f, 10.0f);
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 a = pos, b = ImVec2(pos.x + w, pos.y + h);
+    if (t > 0.02f) DrawGlowRect(dl, a, b, h * 0.5f, ST_CYAN, t * 0.7f);
+    dl->AddRectFilled(a, b, StMix(ST_PANEL_ELEV, StAlpha(ST_CYAN, 0.20f), t), h * 0.5f);
+    ImU32 border = StMix(StAlpha(ST_CYAN, 0.16f + 0.24f * hov), StAlpha(ST_CYAN, 0.85f), t);
+    dl->AddRect(a, b, border, h * 0.5f, 0, 1.1f);
+
+    float thumbX = a.x + 12.0f + t * (w - 24.0f);
+    float cy = a.y + h * 0.5f;
+    if (t > 0.02f) dl->AddCircleFilled(ImVec2(thumbX, cy), 11.0f, StAlpha(ST_CYAN, 0.16f * t));
+    dl->AddCircleFilled(ImVec2(thumbX, cy), 9.0f, StMix(ST_TEXT_MUTED, ST_CYAN, t));
+    dl->AddCircle(ImVec2(thumbX, cy), 9.0f, IM_COL32(9, 12, 21, 170), 0, 1.2f);
+
+    if (hasLabel) {
+        dl->AddText(ImVec2(a.x + w + gap, pos.y + (h - tsz.y) * 0.5f), ST_TEXT, label);
+    }
+    return clicked;
+}
+
+// ---- Slider Starlume (Variant 6): track gradien biru→putih, thumb diamond gold ----
+static bool StarlumeSliderEx(const char* label, float* v, float vmin, float vmax, int decimals, const char* suffix, float width) {
+    if (vmax <= vmin) return false;
+    ImGui::PushID(label);
+    float availW = ImGui::GetContentRegionAvail().x;
+    float w = (width > 0.0f) ? (std::min)(width, availW) : availW;
+    if (w < 40.0f) w = 40.0f;
+
+    char valBuf[64];
+    snprintf(valBuf, sizeof(valBuf), "%.*f%s", decimals, (double)*v, suffix ? suffix : "");
+
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddText(pos, ST_TEXT_DIM, label);
+    ImVec2 vtsz = ImGui::CalcTextSize(valBuf);
+    dl->AddText(ImVec2(pos.x + w - vtsz.x, pos.y), ST_GOLD, valBuf);
+    ImGui::Dummy(ImVec2(w, ImGui::GetFontSize() + 5.0f));
+
+    float trackH = 24.0f;
+    ImVec2 tpos = ImGui::GetCursorScreenPos();
+    ImGuiID id = ImGui::GetID("##slider");
+    ImGui::InvisibleButton("##slider", ImVec2(w, trackH));
+    bool hovered = ImGui::IsItemHovered();
+    bool active = ImGui::IsItemActive();
+    bool changed = false;
+    if (active) {
+        float nx = (ImGui::GetIO().MousePos.x - tpos.x) / w;
+        nx = (std::min)(1.0f, (std::max)(0.0f, nx));
+        float nv = vmin + nx * (vmax - vmin);
+        if (nv != *v) { *v = nv; changed = true; }
+    }
+    float frac = (*v - vmin) / (vmax - vmin);
+    frac = (std::min)(1.0f, (std::max)(0.0f, frac));
+    float ht = AnimTowards(id ^ 0x5A17u, (hovered || active) ? 1.0f : 0.0f, 12.0f);
+
+    ImVec2 a = ImVec2(tpos.x, tpos.y + (trackH - 7.0f) * 0.5f);
+    ImVec2 b = ImVec2(tpos.x + w, a.y + 7.0f);
+    dl->AddRectFilled(a, b, ST_BG_BASE, 3.5f);
+    float fx = a.x + (b.x - a.x) * frac;
+    if (fx > a.x + 1.5f) StGradientBar(dl, a, ImVec2(fx, b.y), 3.5f, ST_CYAN, ST_WHITE);
+    dl->AddRect(a, b, ST_CYAN_LINE, 3.5f, 0, 1.0f);
+
+    float cx = (std::min)(b.x - 3.0f, (std::max)(a.x + 3.0f, fx));
+    float cyy = (a.y + b.y) * 0.5f;
+    float r = 8.0f + 2.0f * ht;
+    if (ht > 0.01f) {
+        for (int i = 3; i >= 1; --i) {
+            float gr = r + (float)i * 2.0f;
+            ImVec2 gp[4] = { ImVec2(cx, cyy - gr), ImVec2(cx + gr, cyy), ImVec2(cx, cyy + gr), ImVec2(cx - gr, cyy) };
+            dl->AddConvexPolyFilled(gp, 4, StAlpha(ST_GOLD, 0.06f * ht / (float)i));
+        }
+    }
+    ImVec2 dp[4] = { ImVec2(cx, cyy - r), ImVec2(cx + r, cyy), ImVec2(cx, cyy + r), ImVec2(cx - r, cyy) };
+    dl->AddConvexPolyFilled(dp, 4, ST_GOLD);
+    dl->AddPolyline(dp, 4, ST_BG_BASE, 2.0f, ImDrawFlags_Closed);
+    ImGui::PopID();
+    return changed;
+}
+
+static bool StarlumeSliderInt(const char* label, int* v, int vmin, int vmax, const char* suffix = "", float width = -1.0f) {
+    float fv = (float)*v;
+    if (StarlumeSliderEx(label, &fv, (float)vmin, (float)vmax, 0, suffix, width)) {
+        int nv = (int)std::lround(fv);
+        nv = (std::min)(vmax, (std::max)(vmin, nv));
+        if (nv != *v) { *v = nv; return true; }
+    }
+    return false;
+}
+
+static bool StarlumeSliderFloat(const char* label, float* v, float vmin, float vmax, int decimals = 1, const char* suffix = "", float width = -1.0f) {
+    return StarlumeSliderEx(label, v, vmin, vmax, decimals, suffix, width);
+}
+
+// ---- Resource usage bars (Variant 1: Starlume & Segmented) ----
+static void StBarHeader(const char* label, const char* valText, ImU32 valCol) {
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    float w = ImGui::GetContentRegionAvail().x;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddText(pos, ST_TEXT_DIM, label);
+    ImVec2 vtsz = ImGui::CalcTextSize(valText);
+    dl->AddText(ImVec2(pos.x + w - vtsz.x, pos.y), valCol, valText);
+    ImGui::Dummy(ImVec2(w, ImGui::GetFontSize() + 4.0f));
+}
+
+static void StarlumeBarInternal(const char* valText, float pct01, ImU32 topCol, bool withHeader, const char* label, ImU32 valCol) {
+    pct01 = (std::min)(1.0f, (std::max)(0.0f, pct01));
+    float w = ImGui::GetContentRegionAvail().x;
+    if (withHeader) StBarHeader(label, valText, valCol);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImVec2 a = pos, b = ImVec2(pos.x + w, pos.y + 10.0f);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(a, b, ST_BG_BASE, 5.0f);
+    float fx = a.x + (b.x - a.x) * pct01;
+    if (fx > a.x + 1.5f) {
+        StGradientBar(dl, a, ImVec2(fx, b.y), 5.0f, ST_CYAN, topCol);
+        dl->PushClipRect(a, ImVec2(fx, b.y), true);
+        float bw = (b.x - a.x) * 0.30f;
+        float phase = fmodf((float)ImGui::GetTime() * 0.55f, 1.0f);
+        float bx = a.x - bw + ((b.x - a.x) + 2.0f * bw) * phase;
+        ImU32 peak = StAlpha(ST_WHITE, 0.30f);
+        ImU32 none = StAlpha(ST_WHITE, 0.0f);
+        dl->AddRectFilledMultiColor(ImVec2(bx, a.y), ImVec2(bx + bw * 0.5f, b.y), none, peak, peak, none);
+        dl->AddRectFilledMultiColor(ImVec2(bx + bw * 0.5f, a.y), ImVec2(bx + bw, b.y), peak, none, none, peak);
+        dl->PopClipRect();
+    }
+    dl->AddRect(a, b, ST_CYAN_LINE, 5.0f, 0, 1.0f);
+    ImGui::Dummy(ImVec2(w, 10.0f));
+}
+
+static void StarlumeBar(const char* label, float pct01, const char* valText, ImU32 valCol = ST_GOLD, ImU32 topCol = ST_WHITE) {
+    StarlumeBarInternal(valText, pct01, topCol, true, label, valCol);
+}
+
+static void SegmentedBar(const char* label, float pct01, const char* valText, ImU32 valCol = ST_GOLD) {
+    const int cells = 10;
+    pct01 = (std::min)(1.0f, (std::max)(0.0f, pct01));
+    float w = ImGui::GetContentRegionAvail().x;
+    StBarHeader(label, valText, valCol);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float gap = 4.0f;
+    float cw = (w - gap * (cells - 1)) / (float)cells;
+    int filled = (int)std::lround(pct01 * (float)cells);
+    for (int i = 0; i < cells; ++i) {
+        ImVec2 ca = ImVec2(pos.x + i * (cw + gap), pos.y);
+        ImVec2 cb = ImVec2(ca.x + cw, ca.y + 10.0f);
+        if (i < filled) {
+            float t = (i + 0.5f) / (float)cells;
+            ImU32 col = (t < 0.5f) ? ST_CYAN : (t < 0.8f ? ST_GOLD : ST_RED);
+            dl->AddRectFilled(ImVec2(ca.x - 1.2f, ca.y - 1.2f), ImVec2(cb.x + 1.2f, cb.y + 1.2f), StAlpha(col, 0.22f), 4.0f);
+            dl->AddRectFilledMultiColor(ca, cb, StMix(col, ST_WHITE, 0.30f), StMix(col, ST_WHITE, 0.30f), col, col);
+        } else {
+            dl->AddRectFilled(ca, cb, ST_PANEL_ELEV, 2.5f);
+            dl->AddRect(ca, cb, ST_CYAN_LINE, 2.5f, 0, 1.0f);
+        }
+    }
+    ImGui::Dummy(ImVec2(w, 10.0f));
+}
+
+// ---- Progress bar Starlume (utk progress optimisasi) ----
+static void StarlumeProgress(float pct01, float h, const char* text) {
+    pct01 = (std::min)(1.0f, (std::max)(0.0f, pct01));
+    float w = ImGui::GetContentRegionAvail().x;
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImVec2 a = pos, b = ImVec2(pos.x + w, pos.y + h);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float r = h * 0.5f;
+    dl->AddRectFilled(a, b, ST_BG_BASE, r);
+    float fx = a.x + (b.x - a.x) * pct01;
+    if (fx > a.x + 1.5f) {
+        StGradientBar(dl, a, ImVec2(fx, b.y), r, ST_CYAN, ST_WHITE);
+        dl->PushClipRect(a, ImVec2(fx, b.y), true);
+        float bw = (b.x - a.x) * 0.25f;
+        float phase = fmodf((float)ImGui::GetTime() * 0.7f, 1.0f);
+        float bx = a.x - bw + ((b.x - a.x) + 2.0f * bw) * phase;
+        ImU32 peak = StAlpha(ST_WHITE, 0.35f);
+        ImU32 none = StAlpha(ST_WHITE, 0.0f);
+        dl->AddRectFilledMultiColor(ImVec2(bx, a.y), ImVec2(bx + bw * 0.5f, b.y), none, peak, peak, none);
+        dl->AddRectFilledMultiColor(ImVec2(bx + bw * 0.5f, a.y), ImVec2(bx + bw, b.y), peak, none, none, peak);
+        dl->PopClipRect();
+    }
+    dl->AddRect(a, b, ST_CYAN_LINE, r, 0, 1.0f);
+    if (text && text[0]) {
+        ImVec2 tsz = ImGui::CalcTextSize(text);
+        dl->AddText(ImVec2(a.x + (w - tsz.x) * 0.5f, a.y + (h - tsz.y) * 0.5f), ST_TEXT, text);
+    }
+    ImGui::Dummy(ImVec2(w, h));
+}
+
+// ---- Module card (Startorch Variant 4: Chamfered Module) ----
+enum StCardState { ST_CARD_NORMAL = 0, ST_CARD_SELECTED = 1, ST_CARD_ACTIVE = 2 };
+
+static void StChamferPath(ImVec2 a, ImVec2 b, float chamfer, float inflate, ImVec2* p) {
+    p[0] = ImVec2(a.x - inflate, a.y - inflate);
+    p[1] = ImVec2(b.x - chamfer - inflate, a.y - inflate);
+    p[2] = ImVec2(b.x + inflate, a.y + chamfer + inflate);
+    p[3] = ImVec2(b.x + inflate, b.y + inflate);
+    p[4] = ImVec2(a.x + chamfer + inflate, b.y + inflate);
+    p[5] = ImVec2(a.x - inflate, b.y - chamfer - inflate);
+}
+
+static bool BeginModuleCard(const char* id, ImVec2 size, float chamfer = 18.0f, int state = ST_CARD_NORMAL, ImGuiWindowFlags flags = 0, float padX = 16.0f, float padY = 14.0f) {
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImVec2 sz = size;
+    ImVec2 avail = ImGui::GetContentRegionAvail();
+    if (sz.x <= 0.0f) sz.x = avail.x;
+    if (sz.y <= 0.0f) sz.y = avail.y;
+    ImVec2 a = pos, b = ImVec2(pos.x + sz.x, pos.y + sz.y);
+
+    ImGuiID uid = ImGui::GetID(id);
+    bool hovered = ImGui::IsMouseHoveringRect(a, b);
+    float ht = AnimTowards(uid ^ 0x0C0Du, (hovered && state == ST_CARD_NORMAL) ? 1.0f : 0.0f, 9.0f);
+
+    ImU32 accent = (state == ST_CARD_ACTIVE) ? ST_GOLD : ST_CYAN;
+    float glow = (state == ST_CARD_SELECTED) ? 0.55f : (state == ST_CARD_ACTIVE ? 0.5f : ht * 0.45f);
+    ImU32 fill = ST_GLASS;
+    if (state == ST_CARD_NORMAL && hovered) fill = ST_GLASS_HOVER;
+    else if (state == ST_CARD_SELECTED) fill = IM_COL32(24, 38, 60, 240);
+    else if (state == ST_CARD_ACTIVE) fill = IM_COL32(38, 34, 22, 240);
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 p[6];
+    if (glow > 0.02f) {
+        for (int i = 3; i >= 1; --i) {
+            float off = (float)i * 2.4f;
+            StChamferPath(a, b, chamfer, off, p);
+            dl->AddConvexPolyFilled(p, 6, StAlpha(accent, 0.045f * glow / (float)i));
+        }
+    }
+    StChamferPath(a, b, chamfer, 0.0f, p);
+    dl->AddConvexPolyFilled(p, 6, fill);
+    ImU32 border = (state != ST_CARD_NORMAL) ? StAlpha(accent, 0.85f) : StMix(ST_CYAN_LINE, ST_CYAN_EDGE, ht);
+    dl->AddPolyline(p, 6, border, (state == ST_CARD_NORMAL) ? 1.2f : 1.6f, ImDrawFlags_Closed);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padX, padY));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
+    ImGui::BeginChild(id, sz, ImGuiChildFlags_None, flags);
+    return hovered;
+}
+
+static void EndModuleCard() {
+    ImGui::EndChild();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(2);
+}
+
 static void RenderFloatingDock() {
     const float dockW = 320.0f;
     const float dockH = 56.0f;
@@ -469,39 +904,20 @@ static void RenderFloatingDock() {
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 28.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.13f, 0.14f, 0.19f, 0.90f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0f, 1.0f, 1.0f, 0.14f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.035f, 0.047f, 0.082f, 0.92f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.220f, 0.910f, 1.000f, 0.25f));
     ImGui::BeginChild("FloatingDock", ImVec2(dockW, dockH), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     {
         static const char* icons[4] = { ICON_FA_IMAGES, ICON_FA_LOCK, ICON_FA_SLIDERS, ICON_FA_GAUGE_HIGH };
         static const char* tips[4] = { "Wallpaper Gallery", "Lock Screen & Static", "General Settings", "Performance & Advanced" };
-        ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 dockOrigin = ImGui::GetCursorScreenPos();
         float slotW = (dockW - 20.0f) / 4.0f;
         for (int i = 0; i < 4; ++i) {
             ImVec2 bp0 = ImVec2(dockOrigin.x + i * slotW + (slotW - 52.0f) * 0.5f, dockOrigin.y);
-            ImVec2 bp1 = ImVec2(bp0.x + 52.0f, bp0.y + 40.0f);
             bool active = (g_activePage == i);
-            ImU32 bg = active ? IM_COL32(76, 154, 255, 255) : IM_COL32(0, 0, 0, 0);
-            ImU32 fg = active ? IM_COL32(255, 255, 255, 255) : IM_COL32(150, 158, 175, 255);
-            if (active) dl->AddRectFilled(bp0, bp1, bg, 20.0f);
-            else if (ImGui::IsMouseHoveringRect(bp0, bp1)) dl->AddRectFilled(bp0, bp1, IM_COL32(255,255,255,14), 20.0f);
             ImGui::SetCursorScreenPos(bp0);
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 20.0f);
             char btnId[32]; snprintf(btnId, sizeof(btnId), "##dock%d", i);
-            if (ImGui::Button(btnId, ImVec2(52.0f, 40.0f))) g_activePage = i;
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor(3);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tips[i]);
-            ImVec2 tsz = ImGui::CalcTextSize(icons[i]);
-            dl->AddText(ImVec2(bp0.x + (52.0f - tsz.x) * 0.5f, bp0.y + 8.0f), fg, icons[i]);
-            if (active) {
-                ImVec2 dc = ImVec2(bp0.x + 26.0f, bp1.y - 5.0f);
-                dl->AddCircleFilled(dc, 2.5f, IM_COL32(255, 255, 255, 255));
-            }
+            if (HoloIconButton(btnId, icons[i], 52.0f, 40.0f, 16.0f, false, active, tips[i])) g_activePage = i;
         }
     }
     ImGui::EndChild();
@@ -549,18 +965,14 @@ static void RenderOriginalTooltip(const VideoProbeResult& probe, const char* siz
 
 static void RenderGalleryDetailPanel(const std::string& path, const std::string& filename, const VideoProbeResult& probe, const char* size_str, int target_w, int target_h, const std::string& opt_path, bool has_opt, bool is_already_optimal, bool is_playing_opt, bool is_playing_ori, bool is_current, float detailH) {
     auto& cfg = g_config.Get();
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 16.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 14.0f));
-    ImGui::BeginChild("GalleryDetail", ImVec2(312, detailH), true, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+    BeginModuleCard("GalleryDetail", ImVec2(312, detailH), 18.0f, ST_CARD_NORMAL, ImGuiWindowFlags_AlwaysVerticalScrollbar);
     {
         // Header row: title + close
         if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-        ImGui::TextColored(ImVec4(0.93f, 0.94f, 0.96f, 1.0f), ICON_FA_CIRCLE_INFO "  Detail Video");
+        ImGui::TextColored(ImVec4(0.945f, 0.961f, 0.976f, 1.0f), ICON_FA_CIRCLE_INFO "  Detail Video");
         if (g_fontSemibold) ImGui::PopFont();
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 6.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        if (ImGui::SmallButton(ICON_FA_XMARK)) { g_detailVisible = false; }
-        ImGui::PopStyleColor();
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 38.0f);
+        if (HoloButtonSmall(ICON_FA_XMARK)) { g_detailVisible = false; }
         ImGui::Separator();
         ImGui::Spacing();
 
@@ -580,21 +992,21 @@ static void RenderGalleryDetailPanel(const std::string& path, const std::string&
             ImVec2 lts = ImGui::CalcTextSize(lt);
             pdl->AddText(ImVec2(pp0.x + (pvW - lts.x) * 0.5f, pp0.y + (pvH - lts.y) * 0.5f), IM_COL32(140, 145, 160, 255), lt);
         }
-        pdl->AddRect(pp0, pp1, IM_COL32(255, 255, 255, 22), 12.0f);
+        pdl->AddRect(pp0, pp1, IM_COL32(56, 232, 255, 46), 12.0f);
         if (is_current) {
-            // Active glow border
-            pdl->AddRect(pp0, pp1, IM_COL32(76, 154, 255, 220), 12.0f, 0, 2.0f);
+            // Active glow border (gold = sedang dipakai)
+            pdl->AddRect(pp0, pp1, IM_COL32(255, 209, 102, 220), 12.0f, 0, 2.0f);
         }
         ImGui::Dummy(ImVec2(pvW, pvH + 4.0f));
 
         // Badge
         std::string badgeText; ImU32 bBg, bFg;
         if (is_current) {
-            if (is_playing_opt) { badgeText = ICON_FA_BOLT "  ACTIVE (OPTIMIZED)"; bBg = IM_COL32(20, 70, 45, 255); bFg = IM_COL32(60, 235, 130, 255); }
-            else { badgeText = ICON_FA_CIRCLE_PLAY "  ACTIVE (ORIGINAL)"; bBg = IM_COL32(20, 55, 95, 255); bFg = IM_COL32(60, 200, 255, 255); }
-        } else if (has_opt) { badgeText = ICON_FA_CHECK "  Optimized Ready"; bBg = IM_COL32(32, 40, 56, 255); bFg = IM_COL32(140, 190, 245, 255); }
-        else if (is_already_optimal) { badgeText = "1080p Optimal"; bBg = IM_COL32(28, 48, 38, 255); bFg = IM_COL32(120, 220, 150, 255); }
-        else { badgeText = ICON_FA_FILM "  Video File"; bBg = IM_COL32(30, 32, 40, 255); bFg = IM_COL32(140, 145, 160, 255); }
+            if (is_playing_opt) { badgeText = ICON_FA_BOLT "  ACTIVE (OPTIMIZED)"; bBg = IM_COL32(255, 209, 102, 38); bFg = IM_COL32(255, 209, 102, 255); }
+            else { badgeText = ICON_FA_CIRCLE_PLAY "  ACTIVE (ORIGINAL)"; bBg = IM_COL32(56, 232, 255, 34); bFg = IM_COL32(56, 232, 255, 255); }
+        } else if (has_opt) { badgeText = ICON_FA_CHECK "  Optimized Ready"; bBg = IM_COL32(56, 232, 255, 26); bFg = IM_COL32(140, 220, 245, 255); }
+        else if (is_already_optimal) { badgeText = "1080p Optimal"; bBg = IM_COL32(255, 209, 102, 26); bFg = IM_COL32(255, 209, 102, 235); }
+        else { badgeText = ICON_FA_FILM "  Video File"; bBg = IM_COL32(255, 255, 255, 16); bFg = IM_COL32(148, 163, 184, 255); }
         ImVec2 btsz = ImGui::CalcTextSize(badgeText.c_str());
         ImVec2 bcur = ImGui::GetCursorScreenPos();
         pdl->AddRectFilled(bcur, ImVec2(bcur.x + btsz.x + 18.0f, bcur.y + btsz.y + 8.0f), bBg, 8.0f);
@@ -612,63 +1024,57 @@ static void RenderGalleryDetailPanel(const std::string& path, const std::string&
         ImGui::Spacing();
 
         // Metadata box
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.09f, 0.10f, 0.13f, 1.0f));
         int metaLines = probe.valid ? 3 : 1;
         if (size_str && size_str[0] != '\0') metaLines++;
-        float metaH = metaLines * ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().WindowPadding.y * 2.0f;
-        ImGui::BeginChild("DetailMeta", ImVec2(0, metaH), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        float metaH = metaLines * ImGui::GetTextLineHeightWithSpacing() + 12.0f * 2.0f;
+        BeginModuleCard("DetailMeta", ImVec2(0, metaH), 10.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse, 12.0f, 12.0f);
         if (probe.valid) {
             ImGui::Text("Resolusi  : %d x %d", probe.width, probe.height);
             ImGui::Text("Framerate : %.0f FPS", probe.fps);
             ImGui::Text("Codec     : %s", probe.codec_name.empty() ? "H.264 / AVC" : probe.codec_name.c_str());
             if (size_str && size_str[0]) ImGui::Text("Ukuran    : %s", size_str);
         } else {
-            ImGui::TextColored(ImVec4(0.6f,0.62f,0.70f,1.0f), "Probing video info...");
+            ImGui::TextColored(ImVec4(0.58f, 0.64f, 0.72f, 1.0f), "Probing video info...");
             if (size_str && size_str[0]) ImGui::Text("Ukuran : %s", size_str);
         }
-        ImGui::EndChild();
-        ImGui::PopStyleColor();
+        EndModuleCard();
         ImGui::Spacing();
 
         float fullW = ImGui::GetContentRegionAvail().x;
         if (is_current) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.82f, 0.24f, 0.24f, 1.00f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.92f, 0.30f, 0.30f, 1.00f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.00f, 0.40f, 0.40f, 1.00f));
-            if (ImGui::Button(ICON_FA_STOP "  Stop Wallpaper", ImVec2(fullW, 0))) ApplyAction("", "stop");
-            ImGui::PopStyleColor(3);
+            if (HoloDangerButton(ICON_FA_STOP "  Stop Wallpaper", ImVec2(fullW, 0))) ApplyAction("", "stop");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop video wallpaper and return to Windows static desktop");
             ImGui::Spacing();
             if (is_playing_opt) {
-                if (ImGui::Button(ICON_FA_PLAY "  Play Original", ImVec2(fullW, 0))) ApplyAction(path, "wallpaper");
+                if (HoloButton(ICON_FA_PLAY "  Play Original", ImVec2(fullW, 0))) ApplyAction(path, "wallpaper");
                 RenderOriginalTooltip(probe, size_str, path);
             } else {
                 if (has_opt) {
-                    if (ImGui::Button(ICON_FA_BOLT "  Switch to Optimized", ImVec2(fullW, 0))) ApplyAction(opt_path, "wallpaper");
+                    if (HoloButton(ICON_FA_BOLT "  Switch to Optimized", ImVec2(fullW, 0))) ApplyAction(opt_path, "wallpaper");
                     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Switch to pre-rendered optimized version to save ~70% GPU");
                 } else if (!is_already_optimal) {
-                    if (ImGui::Button(ICON_FA_DOWNLOAD "  Optimize Video", ImVec2(fullW, 0))) StartVideoOptimization(path, target_w, target_h, "wallpaper", cfg.optimizer_crop_mode);
+                    if (HoloButton(ICON_FA_DOWNLOAD "  Optimize Video", ImVec2(fullW, 0))) StartVideoOptimization(path, target_w, target_h, "wallpaper", cfg.optimizer_crop_mode);
                     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pre-render hardware-optimized 1080p copy (Low GPU load)");
                 }
             }
         } else {
             if (has_opt) {
-                if (ImGui::Button(ICON_FA_BOLT "  Play Optimized", ImVec2(fullW, 0))) ApplyAction(opt_path, "wallpaper");
+                if (HoloButton(ICON_FA_BOLT "  Play Optimized", ImVec2(fullW, 0))) ApplyAction(opt_path, "wallpaper");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play pre-rendered optimized version (Low GPU usage)");
-                if (ImGui::Button(ICON_FA_PLAY "  Play Original", ImVec2(fullW, 0))) ApplyAction(path, "wallpaper");
+                if (HoloButton(ICON_FA_PLAY "  Play Original", ImVec2(fullW, 0))) ApplyAction(path, "wallpaper");
                 RenderOriginalTooltip(probe, size_str, path);
             } else if (is_already_optimal) {
-                if (ImGui::Button(ICON_FA_PLAY "  Play Wallpaper", ImVec2(fullW, 0))) RequestApplyVideo(path, "wallpaper");
+                if (HoloButton(ICON_FA_PLAY "  Play Wallpaper", ImVec2(fullW, 0))) RequestApplyVideo(path, "wallpaper");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play 1080p native video directly");
             } else {
-                if (ImGui::Button(ICON_FA_PLAY "  Play Original", ImVec2(fullW, 0))) RequestApplyVideo(path, "wallpaper");
+                if (HoloButton(ICON_FA_PLAY "  Play Original", ImVec2(fullW, 0))) RequestApplyVideo(path, "wallpaper");
                 RenderOriginalTooltip(probe, size_str, path);
-                if (ImGui::Button(ICON_FA_DOWNLOAD "  Optimize Video", ImVec2(fullW, 0))) StartVideoOptimization(path, target_w, target_h, "wallpaper", cfg.optimizer_crop_mode);
+                if (HoloButton(ICON_FA_DOWNLOAD "  Optimize Video", ImVec2(fullW, 0))) StartVideoOptimization(path, target_w, target_h, "wallpaper", cfg.optimizer_crop_mode);
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pre-render hardware-optimized 1080p copy (Low GPU load)");
             }
         }
         ImGui::Spacing();
-        if (ImGui::Button(ICON_FA_CAMERA "  Capture Frame", ImVec2(fullW, 0))) OpenCaptureModal(path);
+        if (HoloButton(ICON_FA_CAMERA "  Capture Frame", ImVec2(fullW, 0))) OpenCaptureModal(path);
         if (ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
             if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
@@ -680,8 +1086,7 @@ static void RenderGalleryDetailPanel(const std::string& path, const std::string&
             ImGui::BulletText("Windows Lock Screen (Win+L seamless transition)");
             ImGui::EndTooltip();
         }
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.24f, 0.30f, 1.0f));
-        if (ImGui::Button(ICON_FA_TRASH_CAN "  Remove from Gallery", ImVec2(fullW, 0))) {
+        if (HoloDangerButton(ICON_FA_TRASH_CAN "  Remove from Gallery", ImVec2(fullW, 0))) {
             bool wasCur = is_current;
             if (wasCur) ApplyAction("", "stop");
             ThumbnailManager::DeleteThumbnailCache(path);
@@ -690,18 +1095,10 @@ static void RenderGalleryDetailPanel(const std::string& path, const std::string&
             g_config.Save();
             g_detailVisible = false;
         }
-        ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove video from gallery");
         ImGui::Dummy(ImVec2(1.0f, 56.0f));
     }
-    ImGui::EndChild();
-    // Glass edge highlight di bibir atas panel
-    {
-        ImDrawList* edl = ImGui::GetWindowDrawList();
-        ImVec2 eMin = ImGui::GetItemRectMin(), eMax = ImGui::GetItemRectMax();
-        edl->AddLine(ImVec2(eMin.x + 18.0f, eMin.y + 1.5f), ImVec2(eMax.x - 18.0f, eMin.y + 1.5f), IM_COL32(255, 255, 255, 34), 1.0f);
-    }
-    ImGui::PopStyleVar(2);
+    EndModuleCard();
 }
 
 // Pill aksi (tambah/refresh/hapus) melayang DI ATAS cards gallery — digambar terakhir biar paling atas.
@@ -718,17 +1115,13 @@ static void RenderSidePillOverlay(ImVec2 rowTop, float rowH) {
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 24.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 8.0f));
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.13f, 0.14f, 0.19f, 0.90f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0f, 1.0f, 1.0f, 0.16f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.035f, 0.047f, 0.082f, 0.92f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.220f, 0.910f, 1.000f, 0.25f));
     ImGui::BeginChild("SideMenuPill", ImVec2(48, sidePillH), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     {
         ImGui::PushID("SideMenu");
-        ImGui::SetWindowFontScale(1.35f);
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.08f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.30f, 0.60f, 1.00f, 0.30f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0f);
-        if (ImGui::Button(ICON_FA_PLUS, ImVec2(sideBtn, sideBtn))) {
+        ImGui::SetWindowFontScale(1.30f);
+        if (HoloIconButton("##pill_add", ICON_FA_PLUS, sideBtn, sideBtn, 13.0f, false, false, "Tambah video")) {
             wchar_t filename[MAX_PATH] = L"";
             OPENFILENAMEW ofn = {};
             ofn.lStructSize = sizeof(ofn);
@@ -745,13 +1138,10 @@ static void RenderSidePillOverlay(ImVec2 rowTop, float rowH) {
                 RequestApplyVideo(utf8_path, "wallpaper");
             }
         }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Tambah video");
-        if (ImGui::Button(ICON_FA_ROTATE, ImVec2(sideBtn, sideBtn))) {
+        if (HoloIconButton("##pill_refresh", ICON_FA_ROTATE, sideBtn, sideBtn, 13.0f, false, false, "Refresh galeri")) {
             g_config.Load();
         }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Refresh galeri");
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.50f, 0.50f, 1.0f));
-        if (ImGui::Button(ICON_FA_TRASH_CAN, ImVec2(sideBtn, sideBtn))) {
+        if (HoloIconButton("##pill_clear", ICON_FA_TRASH_CAN, sideBtn, sideBtn, 13.0f, true, false, "Hapus semua video")) {
             for (const auto& pp2 : cfg.gallery_history) {
                 ThumbnailManager::DeleteThumbnailCache(pp2);
                 VideoOptimizer::DeleteOptimizedCache(pp2);
@@ -759,10 +1149,6 @@ static void RenderSidePillOverlay(ImVec2 rowTop, float rowH) {
             cfg.gallery_history.clear();
             g_config.Save();
         }
-        ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Hapus semua video");
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(3);
         ImGui::SetWindowFontScale(1.0f);
         ImGui::PopID();
     }
@@ -771,7 +1157,7 @@ static void RenderSidePillOverlay(ImVec2 rowTop, float rowH) {
     {
         ImDrawList* pdl = ImGui::GetWindowDrawList();
         ImVec2 pmn = ImGui::GetItemRectMin(), pmx = ImGui::GetItemRectMax();
-        pdl->AddLine(ImVec2(pmn.x + 14.0f, pmn.y + 1.5f), ImVec2(pmx.x - 14.0f, pmn.y + 1.5f), IM_COL32(255, 255, 255, 40), 1.0f);
+        pdl->AddLine(ImVec2(pmn.x + 14.0f, pmn.y + 1.5f), ImVec2(pmx.x - 14.0f, pmn.y + 1.5f), IM_COL32(56, 232, 255, 46), 1.0f);
     }
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
@@ -797,17 +1183,17 @@ static void RenderGalleryTab() {
     }
 
     if (g_hardwareInfo.displays.size() > 1) {
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.16f, 0.22f, 1.00f));
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.25f, 0.45f, 0.65f, 1.00f));
-        ImGui::BeginChild("MultiMonitorBanner", ImVec2(0, 40), true, ImGuiWindowFlags_NoScrollbar);
-        
+        BeginModuleCard("MultiMonitorBanner", ImVec2(0, 54.0f), 14.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar, 16.0f, 12.0f);
+
         if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-        ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_TV " Target Desktops:");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(ImVec4(0.945f, 0.961f, 0.976f, 1.0f), ICON_FA_TV " Target Desktops:");
         if (g_fontSemibold) ImGui::PopFont();
-        ImGui::SameLine();
+        ImGui::SameLine(0, 16.0f);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
 
         bool all_checked = cfg.target_displays.empty() || (cfg.target_displays.size() == g_hardwareInfo.displays.size());
-        if (ImGui::Checkbox("All Monitors", &all_checked)) {
+        if (ToggleSwitch("All Monitors", &all_checked)) {
             if (all_checked) {
                 cfg.target_displays.clear();
             } else {
@@ -819,10 +1205,10 @@ static void RenderGalleryTab() {
         }
 
         for (size_t d = 0; d < g_hardwareInfo.displays.size(); ++d) {
-            ImGui::SameLine();
+            ImGui::SameLine(0, 16.0f);
             bool is_d_checked = cfg.IsDisplayEnabled(static_cast<int>(d));
             std::string disp_label = "Display " + std::to_string(d + 1) + (g_hardwareInfo.displays[d].is_primary ? " (Primary)" : "");
-            if (ImGui::Checkbox(disp_label.c_str(), &is_d_checked)) {
+            if (ToggleSwitch(disp_label.c_str(), &is_d_checked)) {
                 cfg.SetDisplayEnabled(static_cast<int>(d), is_d_checked);
                 g_config.Save();
                 nlohmann::json req{{"cmd", "set_target_displays"}, {"displays", cfg.target_displays}};
@@ -830,8 +1216,7 @@ static void RenderGalleryTab() {
             }
         }
 
-        ImGui::EndChild();
-        ImGui::PopStyleColor(2);
+        EndModuleCard();
         ImGui::Spacing();
     }
 
@@ -863,16 +1248,14 @@ static void RenderGalleryTab() {
 
     if (isGalleryEmpty) {
         ImGui::SetCursorScreenPos(ImVec2(gridRowTop.x, gridRowTop.y));
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 16.0f);
-        ImGui::BeginChild("GalleryEmpty", ImVec2(gridAvailW, gridH), true, ImGuiWindowFlags_NoScrollbar);
+        BeginModuleCard("GalleryEmpty", ImVec2(gridAvailW, gridH), 18.0f);
         ImVec2 ec = ImGui::GetCursorScreenPos();
         ImVec2 esz = ImGui::GetContentRegionAvail();
-        const char* et = "Belum ada video — klik + atau drag & drop ke sini";
+        const char* et = "Belum ada video - klik + atau drag & drop ke sini";
         ImVec2 ets = ImGui::CalcTextSize(et);
         ImGui::SetCursorScreenPos(ImVec2(ec.x + (esz.x - ets.x) * 0.5f, ec.y + (esz.y - ets.y) * 0.5f));
-        ImGui::TextColored(ImVec4(0.62f, 0.65f, 0.72f, 1.0f), "%s", et);
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
+        ImGui::TextColored(ImVec4(0.580f, 0.639f, 0.722f, 1.0f), "%s", et);
+        EndModuleCard();
         RenderSidePillOverlay(gridRowTop, gridH);
         return;
     }
@@ -947,52 +1330,38 @@ static void RenderGalleryTab() {
 
         ImGui::PushID(static_cast<int>(i));
         bool is_selected = (g_selectedGalleryIdx == (int)i);
-        bool highlight = is_current || is_selected;
+        int cardState = is_current ? ST_CARD_ACTIVE : ((is_selected && showDetail) ? ST_CARD_SELECTED : ST_CARD_NORMAL);
 
-        if (is_current) {
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.13f, 0.20f, 0.30f, 0.92f));
-            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.30f, 0.65f, 1.00f, 0.95f));
-        } else if (is_selected && showDetail) {
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.13f, 0.16f, 0.24f, 0.92f));
-            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.30f, 0.60f, 1.00f, 0.70f));
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.11f, 0.12f, 0.16f, 0.88f));
-            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.00f, 1.00f, 1.00f, 0.09f));
-        }
-
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 14.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, highlight ? 1.6f : 1.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-
-        ImGui::BeginChild("VCard", ImVec2(cardWidth, cardHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        BeginModuleCard("VCard", ImVec2(cardWidth, cardHeight), 14.0f, cardState, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse, 0.0f, 0.0f);
         {
             ImDrawList* draw_list = ImGui::GetWindowDrawList();
             ImVec2 cardPos = ImGui::GetCursorScreenPos();
             float innerW = cardWidth;
             // Thumbnail top (full-bleed)
             ImVec2 t0 = ImVec2(cardPos.x + 6.0f, cardPos.y + 6.0f);
-            ImVec2 t1 = ImVec2(cardPos.x + innerW - 6.0f, cardPos.y + 6.0f + thumbH);
+            ImVec2 t1 = ImVec2(cardPos.x + innerW - 10.0f, cardPos.y + 6.0f + thumbH);
             ID3D11ShaderResourceView* thumb_srv = ThumbnailManager::Instance().GetThumbnailSRV(g_pd3dDevice, path);
             if (thumb_srv) {
                 draw_list->AddImageRounded((ImTextureID)thumb_srv, t0, t1, ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, 10.0f);
             } else {
-                draw_list->AddRectFilled(t0, t1, IM_COL32(20, 22, 28, 255), 10.0f);
-                draw_list->AddRect(t0, t1, IM_COL32(45, 52, 66, 255), 10.0f);
+                draw_list->AddRectFilled(t0, t1, IM_COL32(17, 23, 38, 255), 10.0f);
+                draw_list->AddRect(t0, t1, IM_COL32(56, 232, 255, 40), 10.0f);
                 const char* lt = "Loading...";
                 ImVec2 lts = ImGui::CalcTextSize(lt);
-                draw_list->AddText(ImVec2(t0.x + (innerW - 12.0f - lts.x) * 0.5f, t0.y + (thumbH - lts.y) * 0.5f), IM_COL32(140, 145, 160, 255), lt);
+                draw_list->AddText(ImVec2(t0.x + (innerW - 16.0f - lts.x) * 0.5f, t0.y + (thumbH - lts.y) * 0.5f), IM_COL32(140, 152, 168, 255), lt);
             }
-            draw_list->AddRect(t0, t1, IM_COL32(255, 255, 255, 18), 10.0f);
-            if (is_current) draw_list->AddRect(t0, t1, IM_COL32(76, 154, 255, 200), 10.0f, 0, 1.6f);
+            draw_list->AddRect(t0, t1, IM_COL32(56, 232, 255, 40), 10.0f);
+            if (is_current) draw_list->AddRect(t0, t1, IM_COL32(255, 209, 102, 210), 10.0f, 0, 1.6f);
             // Play overlay icon on hover/current
             ImVec2 hovMin = t0, hovMax = t1;
             bool thumbHovered = ImGui::IsMouseHoveringRect(hovMin, hovMax);
             if (is_current || thumbHovered) {
                 ImVec2 cc = ImVec2((t0.x + t1.x) * 0.5f, (t0.y + t1.y) * 0.5f);
-                draw_list->AddCircleFilled(cc, 20.0f, IM_COL32(10, 12, 16, 170));
+                draw_list->AddCircleFilled(cc, 20.0f, IM_COL32(9, 12, 21, 178));
+                draw_list->AddCircle(cc, 20.0f, IM_COL32(56, 232, 255, 90), 0, 1.2f);
                 const char* pic = is_current ? ICON_FA_PAUSE : ICON_FA_PLAY;
                 ImVec2 psz = ImGui::CalcTextSize(pic);
-                draw_list->AddText(ImVec2(cc.x - psz.x * 0.5f, cc.y - psz.y * 0.5f), IM_COL32(255, 255, 255, 255), pic);
+                draw_list->AddText(ImVec2(cc.x - psz.x * 0.5f, cc.y - psz.y * 0.5f), is_current ? IM_COL32(255, 209, 102, 255) : IM_COL32(241, 245, 249, 255), pic);
             }
             ImGui::Dummy(ImVec2(innerW, thumbH + 12.0f));
 
@@ -1002,10 +1371,10 @@ static void RenderGalleryTab() {
             float footW = innerW - 24.0f;
             std::string verBadge;
             ImU32 verBg, verFg;
-            if (is_playing_opt || (is_current && has_opt)) { verBadge = "OPTIMIZED"; verBg = IM_COL32(20, 70, 45, 255); verFg = IM_COL32(70, 235, 140, 255); }
-            else if (has_opt) { verBadge = "ORI + OPT"; verBg = IM_COL32(28, 44, 68, 255); verFg = IM_COL32(140, 190, 245, 255); }
-            else if (is_already_optimal) { verBadge = "ORI • Optimal"; verBg = IM_COL32(28, 48, 38, 255); verFg = IM_COL32(120, 220, 150, 255); }
-            else { verBadge = "ORIGINAL"; verBg = IM_COL32(32, 34, 42, 255); verFg = IM_COL32(150, 155, 168, 255); }
+            if (is_playing_opt || (is_current && has_opt)) { verBadge = "OPTIMIZED"; verBg = IM_COL32(56, 232, 255, 30); verFg = IM_COL32(56, 232, 255, 255); }
+            else if (has_opt) { verBadge = "ORI + OPT"; verBg = IM_COL32(255, 255, 255, 20); verFg = IM_COL32(241, 245, 249, 220); }
+            else if (is_already_optimal) { verBadge = "ORI - Optimal"; verBg = IM_COL32(255, 209, 102, 28); verFg = IM_COL32(255, 209, 102, 235); }
+            else { verBadge = "ORIGINAL"; verBg = IM_COL32(255, 255, 255, 14); verFg = IM_COL32(148, 163, 184, 255); }
             if (is_current) { verBadge = std::string(ICON_FA_CIRCLE_PLAY "  ") + verBadge; }
 
             std::string titleStr = filename;
@@ -1024,17 +1393,11 @@ static void RenderGalleryTab() {
             draw_list->AddRectFilled(bp0, bp1, verBg, 6.0f);
             draw_list->AddText(ImVec2(bp0.x + 8.0f, bp0.y + 3.0f), verFg, verBadge.c_str());
 
-            if (!meta_line.empty()) ImGui::TextColored(ImVec4(0.55f, 0.59f, 0.68f, 1.0f), "%s", meta_line.c_str());
-            else ImGui::TextColored(ImVec4(0.50f, 0.54f, 0.62f, 1.0f), "Video source ready");
+            if (!meta_line.empty()) ImGui::TextColored(ImVec4(0.580f, 0.639f, 0.722f, 1.0f), "%s", meta_line.c_str());
+            else ImGui::TextColored(ImVec4(0.520f, 0.575f, 0.660f, 1.0f), "Video source ready");
             ImGui::EndGroup();
         }
-        ImGui::EndChild();
-        // Glass edge highlight di bibir atas card
-        {
-            ImDrawList* cdl = ImGui::GetWindowDrawList();
-            ImVec2 cMin = ImGui::GetItemRectMin(), cMax = ImGui::GetItemRectMax();
-            cdl->AddLine(ImVec2(cMin.x + 16.0f, cMin.y + 1.5f), ImVec2(cMax.x - 16.0f, cMin.y + 1.5f), IM_COL32(255, 255, 255, 26), 1.0f);
-        }
+        EndModuleCard();
         // Click handling (select + toggle detail)
         bool cardHovered = ImGui::IsItemHovered();
         if (cardHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -1042,8 +1405,6 @@ static void RenderGalleryTab() {
             else { g_selectedGalleryIdx = (int)i; g_detailVisible = true; }
         }
         if (cardHovered) ImGui::SetTooltip("Klik untuk %s detail", (g_detailVisible && is_selected) ? "tutup" : "buka");
-        ImGui::PopStyleVar(3);
-        ImGui::PopStyleColor(2);
         ImGui::PopID();
 
         // Responsive vertical-card grid
@@ -1116,16 +1477,14 @@ static void RenderLockscreenTab() {
     RenderPageTitle(ICON_FA_LOCK, "Lock Screen & Static", "Configure instant 0s Windows boot visuals and lock screen transitions with zero continuous CPU load.");
 
     // CARD 1: Windows Desktop Static Wallpaper (0s Instant Boot Visual)
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.11f, 0.12f, 0.16f, 0.92f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.24f, 0.28f, 0.38f, 1.00f));
-    ImGui::BeginChild("DesktopStaticCard", ImVec2(0, 155), true, ImGuiWindowFlags_NoScrollbar);
+    BeginModuleCard("DesktopStaticCard", ImVec2(0, 155), 18.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar);
 
     if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_DESKTOP "  1. Windows Desktop Static Wallpaper (0s Instant Boot Visual)");
+    ImGui::TextColored(ImVec4(0.945f, 0.961f, 0.976f, 1.0f), ICON_FA_DESKTOP "  1. Windows Desktop Static Wallpaper (0s Instant Boot Visual)");
     if (g_fontSemibold) ImGui::PopFont();
     ImGui::Spacing();
 
-    if (ImGui::Checkbox("Enable Windows Desktop Static Wallpaper", &cfg.update_desktop_wallpaper)) {
+    if (ToggleSwitch("Enable Windows Desktop Static Wallpaper", &cfg.update_desktop_wallpaper)) {
         g_config.Save();
         if (cfg.update_desktop_wallpaper) {
             if (cfg.desktop_static_source_mode == 1 && !cfg.desktop_static_video_path.empty()) {
@@ -1149,17 +1508,17 @@ static void RenderLockscreenTab() {
     if (cfg.update_desktop_wallpaper) {
         ImGui::Indent(18.0f);
         if (cfg.desktop_static_source_mode == 0) {
-            ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.95f, 1.0f), ICON_FA_ROTATE " Active Mode: Auto-Sync (Dynamically follows active live wallpaper)");
+            ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.0f), ICON_FA_ROTATE " Active Mode: Auto-Sync (Dynamically follows active live wallpaper)");
         } else {
             fs::path p(cfg.desktop_static_video_path);
             std::string vidName = p.filename().string();
             if (vidName.empty()) vidName = cfg.desktop_static_video_path;
             int curMin = static_cast<int>(cfg.desktop_static_timestamp) / 60;
             float curSec = static_cast<float>(cfg.desktop_static_timestamp) - curMin * 60.0f;
-            ImGui::TextColored(ImVec4(0.40f, 0.95f, 0.50f, 1.0f), ICON_FA_IMAGE " Active Mode: Custom Frame [%s @ %02d:%05.2f]", vidName.c_str(), curMin, curSec);
+            ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.0f), ICON_FA_IMAGE " Active Mode: Custom Frame [%s @ %02d:%05.2f]", vidName.c_str(), curMin, curSec);
 
             ImGui::SameLine();
-            if (ImGui::SmallButton("Reset to Auto-Sync")) {
+            if (HoloButtonSmall("Reset to Auto-Sync")) {
                 cfg.desktop_static_source_mode = 0;
                 g_config.Save();
                 SendIpcAsync("{\"cmd\":\"sync_desktop_wallpaper\",\"reset_desktop_auto\":true}");
@@ -1177,7 +1536,7 @@ static void RenderLockscreenTab() {
             cur_vid = cfg.gallery_history[0];
         }
 
-        if (ImGui::Button(ICON_FA_CAMERA "  Choose Custom Frame for Desktop...", ImVec2(320, 0))) {
+        if (HoloButton(ICON_FA_CAMERA "  Choose Custom Frame for Desktop...", ImVec2(320, 0))) {
             if (!cur_vid.empty()) {
                 OpenCaptureModal(cur_vid, 1);
             }
@@ -1190,21 +1549,18 @@ static void RenderLockscreenTab() {
         ImGui::TextDisabled("  Desktop static wallpaper injection is currently disabled.");
     }
 
-    ImGui::EndChild();
-    ImGui::PopStyleColor(2);
+    EndModuleCard();
     ImGui::Spacing();
 
     // CARD 2: Windows Lock Screen Wallpaper (Win + L Seamless Transition)
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.11f, 0.12f, 0.16f, 0.92f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.24f, 0.28f, 0.38f, 1.00f));
-    ImGui::BeginChild("LockscreenCard", ImVec2(0, 155), true, ImGuiWindowFlags_NoScrollbar);
+    BeginModuleCard("LockscreenCard", ImVec2(0, 155), 18.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar);
 
     if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_LOCK "  2. Windows Lock Screen Wallpaper (Win + L Seamless Transition)");
+    ImGui::TextColored(ImVec4(0.945f, 0.961f, 0.976f, 1.0f), ICON_FA_LOCK "  2. Windows Lock Screen Wallpaper (Win + L Seamless Transition)");
     if (g_fontSemibold) ImGui::PopFont();
     ImGui::Spacing();
 
-    if (ImGui::Checkbox("Enable Windows Lock Screen Wallpaper", &cfg.update_lockscreen)) {
+    if (ToggleSwitch("Enable Windows Lock Screen Wallpaper", &cfg.update_lockscreen)) {
         g_config.Save();
         if (cfg.update_lockscreen) {
             if (cfg.lockscreen_source_mode == 1 && !cfg.lockscreen_video_path.empty()) {
@@ -1228,17 +1584,17 @@ static void RenderLockscreenTab() {
     if (cfg.update_lockscreen) {
         ImGui::Indent(18.0f);
         if (cfg.lockscreen_source_mode == 0) {
-            ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.95f, 1.0f), ICON_FA_ROTATE " Active Mode: Auto-Sync (Dynamically follows active live wallpaper)");
+            ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.0f), ICON_FA_ROTATE " Active Mode: Auto-Sync (Dynamically follows active live wallpaper)");
         } else {
             fs::path p(cfg.lockscreen_video_path);
             std::string vidName = p.filename().string();
             if (vidName.empty()) vidName = cfg.lockscreen_video_path;
             int curMin = static_cast<int>(cfg.lockscreen_timestamp) / 60;
             float curSec = static_cast<float>(cfg.lockscreen_timestamp) - curMin * 60.0f;
-            ImGui::TextColored(ImVec4(0.40f, 0.95f, 0.50f, 1.0f), ICON_FA_IMAGE " Active Mode: Custom Frame [%s @ %02d:%05.2f]", vidName.c_str(), curMin, curSec);
+            ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.0f), ICON_FA_IMAGE " Active Mode: Custom Frame [%s @ %02d:%05.2f]", vidName.c_str(), curMin, curSec);
 
             ImGui::SameLine();
-            if (ImGui::SmallButton("Reset to Auto-Sync")) {
+            if (HoloButtonSmall("Reset to Auto-Sync")) {
                 cfg.lockscreen_source_mode = 0;
                 g_config.Save();
                 SendIpcAsync("{\"cmd\":\"sync_desktop_wallpaper\",\"reset_lockscreen_auto\":true}");
@@ -1256,7 +1612,7 @@ static void RenderLockscreenTab() {
             cur_vid = cfg.gallery_history[0];
         }
 
-        if (ImGui::Button(ICON_FA_CAMERA "  Choose Custom Frame for Lock Screen...", ImVec2(320, 0))) {
+        if (HoloButton(ICON_FA_CAMERA "  Choose Custom Frame for Lock Screen...", ImVec2(320, 0))) {
             if (!cur_vid.empty()) {
                 OpenCaptureModal(cur_vid, 2);
             }
@@ -1269,17 +1625,14 @@ static void RenderLockscreenTab() {
         ImGui::TextDisabled("  Windows Lock Screen wallpaper integration is currently disabled.");
     }
 
-    ImGui::EndChild();
-    ImGui::PopStyleColor(2);
+    EndModuleCard();
     ImGui::Spacing();
 
     // CARD 3: Windows Screensaver Integration
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.11f, 0.12f, 0.16f, 0.92f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.24f, 0.28f, 0.38f, 1.00f));
-    ImGui::BeginChild("ScreensaverCard", ImVec2(0, 115), true, ImGuiWindowFlags_NoScrollbar);
+    BeginModuleCard("ScreensaverCard", ImVec2(0, 115), 18.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar);
 
     if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_TV "  3. Windows Screensaver Integration");
+    ImGui::TextColored(ImVec4(0.945f, 0.961f, 0.976f, 1.0f), ICON_FA_TV "  3. Windows Screensaver Integration");
     if (g_fontSemibold) ImGui::PopFont();
     ImGui::Spacing();
 
@@ -1290,7 +1643,7 @@ static void RenderLockscreenTab() {
         scr_checked = true;
     }
 
-    if (ImGui::Checkbox("Enable MiniWallpaper as Windows Screensaver", &scr_installed)) {
+    if (ToggleSwitch("Enable MiniWallpaper as Windows Screensaver", &scr_installed)) {
         if (scr_installed) {
             wchar_t exePathBuf[MAX_PATH] = {};
             GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
@@ -1308,18 +1661,18 @@ static void RenderLockscreenTab() {
         ImGui::SetTooltip("Plays your live video wallpaper at full 60 FPS when your computer is idle!\nWhen waking the PC, it transitions seamlessly back.");
     }
 
-    ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_GEAR "  Configure Screensaver...", ImVec2(220, 0))) {
+    ImGui::SameLine(0, 16.0f);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 5.0f);
+    if (HoloButton(ICON_FA_GEAR "  Configure Screensaver...", ImVec2(220, 0))) {
         LockScreenManager::OpenWindowsScreensaverSettings();
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Opens official Windows Screen Saver Settings to adjust idle timeout and resume password.");
     }
 
-    ImGui::TextColored(ImVec4(0.60f, 0.64f, 0.72f, 1.00f), "Smoothly plays your live wallpaper when idle, waking up immediately upon mouse movement.");
+    ImGui::TextColored(ImVec4(0.580f, 0.639f, 0.722f, 1.0f), "Smoothly plays your live wallpaper when idle, waking up immediately upon mouse movement.");
 
-    ImGui::EndChild();
-    ImGui::PopStyleColor(2);
+    EndModuleCard();
 
     // Ruang bawah agar konten tidak tertutup dock yg melayang
     ImGui::Dummy(ImVec2(1.0f, 72.0f));
@@ -1367,7 +1720,7 @@ static void RenderGeneralSettingsTab() {
         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.75f, 1.0f), "Target Desktop Screen(s):");
 
         bool all_checked = cfg.target_displays.empty() || (cfg.target_displays.size() == g_hardwareInfo.displays.size());
-        if (ImGui::Checkbox("All Monitors (Apply to All Desktops)", &all_checked)) {
+        if (ToggleSwitch("All Monitors (Apply to All Desktops)", &all_checked)) {
             if (all_checked) {
                 cfg.target_displays.clear();
             } else {
@@ -1384,7 +1737,7 @@ static void RenderGeneralSettingsTab() {
             std::string label = "Display " + std::to_string(d + 1) + ": " + disp.name + " (" +
                                 std::to_string(disp.width) + "x" + std::to_string(disp.height) + ")" +
                                 (disp.is_primary ? " [Primary]" : " [Secondary]");
-            if (ImGui::Checkbox(label.c_str(), &is_d_checked)) {
+            if (ToggleSwitch(label.c_str(), &is_d_checked)) {
                 cfg.SetDisplayEnabled(static_cast<int>(d), is_d_checked);
                 g_config.Save();
                 nlohmann::json req{{"cmd", "set_target_displays"}, {"displays", cfg.target_displays}};
@@ -1410,8 +1763,7 @@ static void RenderGeneralSettingsTab() {
         volume_init = true;
     }
 
-    ImGui::SetNextItemWidth(sliderW);
-    if (ImGui::SliderFloat("Master Volume", &volume, 0.0f, 1.0f, "%.2f")) {
+    if (StarlumeSliderFloat("Master Volume", &volume, 0.0f, 1.0f, 2, "", sliderW)) {
         if (!cfg.wallpapers.empty()) {
             cfg.wallpapers[0].volume = volume;
         }
@@ -1437,7 +1789,7 @@ static void RenderGeneralSettingsTab() {
         startup_inited = true;
     }
 
-    if (ImGui::Checkbox("Start MiniWallpaper automatically on Windows Boot", &startup_enabled)) {
+    if (ToggleSwitch("Start MiniWallpaper automatically on Windows Boot", &startup_enabled)) {
         WindowsAutostart::SetEnabled(startup_enabled, 0);
         cfg.run_on_startup = startup_enabled;
         g_config.Save();
@@ -1456,16 +1808,16 @@ static void RenderGeneralSettingsTab() {
     if (g_fontSemibold) ImGui::PopFont();
     ImGui::Spacing();
 
-    if (ImGui::Checkbox("Auto-Pause when Fullscreen App/Game is active", &cfg.pause_on_fullscreen)) {
+    if (ToggleSwitch("Auto-Pause when Fullscreen App/Game is active", &cfg.pause_on_fullscreen)) {
         g_config.Save();
     }
-    if (ImGui::Checkbox("Auto-Pause when Window is Maximized / Desktop Covered", &cfg.pause_on_maximized)) {
+    if (ToggleSwitch("Auto-Pause when Window is Maximized / Desktop Covered", &cfg.pause_on_maximized)) {
         g_config.Save();
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Automatically pauses wallpaper playback when an application (browser, code editor, etc.) is maximized and covers the desktop, reducing CPU and GPU usage to 0%.");
     }
-    if (ImGui::Checkbox("Auto-Pause on Battery Power", &cfg.pause_on_battery)) {
+    if (ToggleSwitch("Auto-Pause on Battery Power", &cfg.pause_on_battery)) {
         g_config.Save();
     }
 
@@ -1479,7 +1831,7 @@ static void RenderGeneralSettingsTab() {
     if (g_fontSemibold) ImGui::PopFont();
     ImGui::Spacing();
 
-    if (ImGui::Checkbox("Enable Auto Smooth Looping (Seamless Crossfade)", &cfg.auto_smooth_loop)) {
+    if (ToggleSwitch("Enable Auto Smooth Looping (Seamless Crossfade)", &cfg.auto_smooth_loop)) {
         g_config.Save();
     }
     if (ImGui::IsItemHovered()) {
@@ -1504,8 +1856,7 @@ static void RenderGeneralSettingsTab() {
         }
 
         if (cfg.loop_preset == 4) { // Custom Tuning
-            ImGui::SetNextItemWidth(sliderW);
-            if (ImGui::SliderFloat("Transition Duration", &cfg.smooth_loop_duration, 0.2f, 2.5f, "%.1f seconds")) {
+            if (StarlumeSliderFloat("Transition Duration", &cfg.smooth_loop_duration, 0.2f, 2.5f, 1, " seconds", sliderW)) {
                 g_config.Save();
             }
 
@@ -1520,13 +1871,12 @@ static void RenderGeneralSettingsTab() {
                 g_config.Save();
             }
 
-            if (ImGui::Checkbox("Enable Speed Ramping (Time Warp Deceleration)", &cfg.loop_speed_ramp)) {
+            if (ToggleSwitch("Enable Speed Ramping (Time Warp Deceleration)", &cfg.loop_speed_ramp)) {
                 g_config.Save();
             }
 
             if (cfg.loop_speed_ramp) {
-                ImGui::SetNextItemWidth(sliderW);
-                if (ImGui::SliderFloat("Min Speed at Seam", &cfg.loop_min_speed, 0.50f, 0.95f, "%.2fx")) {
+                if (StarlumeSliderFloat("Min Speed at Seam", &cfg.loop_min_speed, 0.50f, 0.95f, 2, "x", sliderW)) {
                     g_config.Save();
                 }
             }
@@ -1537,10 +1887,10 @@ static void RenderGeneralSettingsTab() {
     ImGui::Separator();
     ImGui::Spacing();
 
-    ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.00f), ICON_FA_CIRCLE_CHECK "  All settings are saved and applied automatically in real-time.");
+    ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), ICON_FA_CIRCLE_CHECK "  All settings are saved and applied automatically in real-time.");
     ImGui::Spacing();
 
-    if (ImGui::Button(ICON_FA_EYE_SLASH "  Hide Window to Tray", ImVec2(200, 0))) {
+    if (HoloButton(ICON_FA_EYE_SLASH "  Hide Window to Tray", ImVec2(200, 0))) {
         SettingsUI::Close();
     }
 
@@ -1603,17 +1953,14 @@ static void RenderPerformancePanel() {
         ImGui::SetTooltip("Choose whether video decoding & rendering runs on GPU 1, GPU 2, or CPU Software.");
     }
 
-    ImGui::SetNextItemWidth(sliderW);
-    if (ImGui::SliderInt("Target Render FPS", &cfg.target_fps, 15, 60)) {
+    if (StarlumeSliderInt("Target Render FPS", &cfg.target_fps, 15, 60, "", sliderW)) {
         g_config.Save();
         nlohmann::json req{{"cmd", "set_fps"}, {"fps", cfg.target_fps}};
         SendIpcAsync(req.dump());
     }
-    ImGui::SameLine();
-    ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.00f), "(Active: %d FPS)", g_daemonFps);
+    ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), ICON_FA_CIRCLE_CHECK "  Active: %d FPS", g_daemonFps);
 
-    ImGui::SetNextItemWidth(sliderW);
-    if (ImGui::SliderInt("Battery Saver FPS", &cfg.battery_fps, 10, 30)) {
+    if (StarlumeSliderInt("Battery Saver FPS", &cfg.battery_fps, 10, 30, "", sliderW)) {
         g_config.Save();
     }
 
@@ -1627,7 +1974,7 @@ static void RenderPerformancePanel() {
     if (g_fontSemibold) ImGui::PopFont();
     ImGui::Spacing();
 
-    if (ImGui::Checkbox("Auto-Sleep when System RAM or GPU VRAM is under heavy load", &cfg.pause_on_resource_heavy)) {
+    if (ToggleSwitch("Auto-Sleep when System RAM or GPU VRAM is under heavy load", &cfg.pause_on_resource_heavy)) {
         g_config.Save();
     }
     if (ImGui::IsItemHovered()) {
@@ -1637,16 +1984,14 @@ static void RenderPerformancePanel() {
     if (cfg.pause_on_resource_heavy) {
         ImGui::Indent(18.0f);
 
-        ImGui::SetNextItemWidth(sliderW - 18.0f);
-        if (ImGui::SliderInt("System RAM Threshold", &cfg.resource_ram_threshold_pct, 60, 95, "%d%%")) {
+        if (StarlumeSliderInt("System RAM Threshold", &cfg.resource_ram_threshold_pct, 60, 95, "%", sliderW - 18.0f)) {
             g_config.Save();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Triggers auto-sleep when overall PC system RAM usage hits this percentage (default 80%).");
         }
 
-        ImGui::SetNextItemWidth(sliderW - 18.0f);
-        if (ImGui::SliderInt("GPU VRAM Threshold", &cfg.resource_vram_threshold_pct, 60, 95, "%d%%")) {
+        if (StarlumeSliderInt("GPU VRAM Threshold", &cfg.resource_vram_threshold_pct, 60, 95, "%", sliderW - 18.0f)) {
             g_config.Save();
         }
         if (ImGui::IsItemHovered()) {
@@ -1657,24 +2002,21 @@ static void RenderPerformancePanel() {
         int cur_vram = g_shared_engine_state.gpu_vram_percent.load();
         bool is_sleeping = g_shared_engine_state.resource_heavy_sleep.load();
 
-        char ram_buf[64], vram_buf[64];
-        snprintf(ram_buf, sizeof(ram_buf), "Live RAM: %d%% (Limit: %d%%)", cur_ram, cfg.resource_ram_threshold_pct);
-        snprintf(vram_buf, sizeof(vram_buf), "Live VRAM: %d%% (Limit: %d%%)", cur_vram, cfg.resource_vram_threshold_pct);
+        bool ram_high = (cur_ram >= cfg.resource_ram_threshold_pct);
+        bool vram_high = (cur_vram >= cfg.resource_vram_threshold_pct);
 
-        ImVec4 ramColor = (cur_ram >= cfg.resource_ram_threshold_pct) ? ImVec4(0.95f, 0.35f, 0.35f, 1.0f) : ImVec4(0.35f, 0.85f, 0.45f, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ramColor);
-        ImGui::ProgressBar(static_cast<float>(cur_ram) / 100.0f, ImVec2(sliderW - 18.0f, 18.0f), ram_buf);
-        ImGui::PopStyleColor();
+        char ram_buf[64], vram_buf[64];
+        snprintf(ram_buf, sizeof(ram_buf), "%d%%  (limit %d%%)", cur_ram, cfg.resource_ram_threshold_pct);
+        snprintf(vram_buf, sizeof(vram_buf), "%d%%  (limit %d%%)", cur_vram, cfg.resource_vram_threshold_pct);
+
+        StarlumeBar("System RAM Usage", cur_ram / 100.0f, ram_buf, ram_high ? ST_RED : ST_GOLD, ram_high ? ST_RED : ST_WHITE);
 
         if (cur_vram > 0) {
-            ImVec4 vramColor = (cur_vram >= cfg.resource_vram_threshold_pct) ? ImVec4(0.95f, 0.35f, 0.35f, 1.0f) : ImVec4(0.35f, 0.85f, 0.45f, 1.0f);
-            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, vramColor);
-            ImGui::ProgressBar(static_cast<float>(cur_vram) / 100.0f, ImVec2(sliderW - 18.0f, 18.0f), vram_buf);
-            ImGui::PopStyleColor();
+            SegmentedBar("GPU VRAM Usage", cur_vram / 100.0f, vram_buf, vram_high ? ST_RED : ST_GOLD);
         }
 
         if (is_sleeping) {
-            ImGui::TextColored(ImVec4(1.0f, 0.80f, 0.20f, 1.00f), ICON_FA_EYE_SLASH "  Auto-Sleep Active: Releasing 100% VRAM & pausing rendering for active game");
+            ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.00f), ICON_FA_EYE_SLASH "  Auto-Sleep Active: Releasing 100% VRAM & pausing rendering for active game");
         }
 
         ImGui::Unindent(18.0f);
@@ -1708,12 +2050,12 @@ static void RenderPerformancePanel() {
     ImGui::Spacing();
 
     if (!g_daemonConnected) {
-        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Engine Status: Background Engine Initializing...");
+        ImGui::TextColored(ImVec4(1.00f, 0.30f, 0.43f, 1.0f), "Engine Status: Background Engine Initializing...");
     } else {
         if (g_daemonPlaying && !g_daemonPaused) {
-            ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.00f), ICON_FA_CIRCLE_CHECK "  Engine Status: Playing (Active)");
+            ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), ICON_FA_CIRCLE_CHECK "  Engine Status: Playing (Active)");
         } else if (g_daemonPaused) {
-            ImGui::TextColored(ImVec4(1.00f, 0.70f, 0.20f, 1.00f), ICON_FA_PAUSE "  Engine Status: Paused");
+            ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.00f), ICON_FA_PAUSE "  Engine Status: Paused");
         } else {
             ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.75f, 1.00f), ICON_FA_STOP "  Engine Status: Idle");
         }
@@ -1752,7 +2094,8 @@ static void RenderPerformancePanel() {
     ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_TV "  Connected Monitors Topology");
     if (g_fontSemibold) ImGui::PopFont();
     ImGui::SameLine();
-    if (ImGui::SmallButton(ICON_FA_ROTATE " Re-detect Displays")) {
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 5.0f);
+    if (HoloButtonSmall(ICON_FA_ROTATE " Re-detect Displays")) {
         g_hardwareInfo.displays = HardwareDetector::GetDisplayList();
     }
 
@@ -1762,10 +2105,10 @@ static void RenderPerformancePanel() {
         for (size_t idx = 0; idx < g_hardwareInfo.displays.size(); ++idx) {
             const auto& disp = g_hardwareInfo.displays[idx];
             if (disp.is_primary) {
-                ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.00f),
+                ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f),
                     "• Display %zu [PRIMARY]: %s", idx + 1, disp.name.c_str());
             } else {
-                ImGui::TextColored(ImVec4(0.55f, 0.75f, 1.00f, 1.00f),
+                ImGui::TextColored(ImVec4(0.62f, 0.88f, 1.00f, 1.00f),
                     "• Display %zu [SECONDARY]: %s", idx + 1, disp.name.c_str());
             }
             ImGui::Text("   Resolution: %d x %d  |  Refresh Rate: %d Hz  |  Desktop Position: (%d, %d)",
@@ -1782,12 +2125,13 @@ static void RenderPerformancePanel() {
     ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_MICROCHIP "  Hardware Topology (CPU & GPU Detection)");
     if (g_fontSemibold) ImGui::PopFont();
     ImGui::SameLine();
-    if (ImGui::SmallButton(ICON_FA_ROTATE " Re-detect Hardware")) {
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 5.0f);
+    if (HoloButtonSmall(ICON_FA_ROTATE " Re-detect Hardware")) {
         g_hardwareInfo = HardwareDetector::QuerySystemInfo();
     }
 
     if (g_daemonActiveGpuIndex == -1) {
-        ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.00f),
+        ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f),
             "• Processor (CPU): %s [ACTIVE RENDERING ENGINE (SOFTWARE CPU)]", g_hardwareInfo.cpu.model_name.c_str());
     } else {
         ImGui::TextColored(ImVec4(0.92f, 0.93f, 0.95f, 1.00f),
@@ -1803,7 +2147,7 @@ static void RenderPerformancePanel() {
             const auto& gpu = g_hardwareInfo.gpus[g_idx];
             bool is_this_gpu_active = (g_daemonActiveGpuIndex == static_cast<int>(g_idx));
             if (is_this_gpu_active) {
-                ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.00f),
+                ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f),
                     "• GPU %zu: %s (%s) [ACTIVE D3D11 RENDERER]",
                     g_idx + 1, gpu.name.c_str(), gpu.is_discrete ? "Discrete GPU" : "Integrated iGPU");
             } else {
@@ -1839,18 +2183,18 @@ static void RenderPerformancePanel() {
     if (!g_daemonLastError.empty()) {
         ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Last Error: %s", g_daemonLastError.c_str());
     } else {
-        ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.00f), "Last Error: (none)");
+        ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), "Last Error: (none)");
     }
 
     ImGui::Spacing();
-    if (ImGui::Button(ICON_FA_EXPAND "  Flash Render Window (Diagnostic)", ImVec2(280, 0))) {
+    if (HoloButton(ICON_FA_EXPAND "  Flash Render Window (Diagnostic)", ImVec2(280, 0))) {
         SendIpcAsync("{\"cmd\":\"test_render\"}");
     }
     ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.65f, 1.0f),
-        "*If the desktop turns green after flashing, injection works.");
+        "*If the desktop turns cyan after flashing, injection works.");
 
     ImGui::Spacing();
-    if (ImGui::Button(ICON_FA_FOLDER_OPEN "  Open Engine Log (Notepad)", ImVec2(280, 0))) {
+    if (HoloButton(ICON_FA_FOLDER_OPEN "  Open Engine Log (Notepad)", ImVec2(280, 0))) {
         const char* appData = getenv("APPDATA");
         if (appData) {
             std::string logPath = std::string(appData) + "\\MiniWallpaper\\engine.log";
@@ -1975,8 +2319,9 @@ static void RenderCaptureFrameModal() {
     }
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowPos(ImVec2(center.x, 26.0f), ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2(680, 580));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(560, 300), ImVec2(680, 700));
 
     if (ImGui::BeginPopupModal("Capture Static Wallpaper / Lock Screen Frame", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
         if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
@@ -2029,50 +2374,32 @@ static void RenderCaptureFrameModal() {
         if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
         ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_DESKTOP "  Target Destination (Where to inject this frame):");
         if (g_fontSemibold) ImGui::PopFont();
-        ImGui::Checkbox("Apply to Windows Desktop Wallpaper (0s Instant Boot Visual)", &g_captureModalTargetDesktop);
+        ToggleSwitch("Apply to Windows Desktop Wallpaper (0s Instant Boot Visual)", &g_captureModalTargetDesktop);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Sets this frame directly into the native Windows Desktop Wallpaper.\nIt appears instantly in 0.0s upon Windows boot without black screen or delay.");
         }
 
-        ImGui::Checkbox("Apply to Windows Lock Screen (Win + L Seamless Transition)", &g_captureModalTargetLockscreen);
+        ToggleSwitch("Apply to Windows Lock Screen (Win + L Seamless Transition)", &g_captureModalTargetLockscreen);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Pre-caches this frame for the Windows Lock Screen.\nWhen pressing Win+L or locking the PC, this image is shown seamlessly.");
         }
 
         if (!g_captureModalTargetDesktop && !g_captureModalTargetLockscreen) {
-            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), ICON_FA_TRIANGLE_EXCLAMATION " Please select at least one destination (Desktop, Lock Screen, or Both).");
-        } else if (g_captureModalTargetDesktop && g_captureModalTargetLockscreen) {
-            ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.0f), "[ Selected Target: BOTH Desktop Wallpaper and Lock Screen ]");
-        } else if (g_captureModalTargetDesktop) {
-            ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.0f), "[ Selected Target: Desktop Wallpaper ONLY ]");
-        } else {
-            ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.0f), "[ Selected Target: Lock Screen ONLY ]");
+            ImGui::TextColored(ImVec4(1.00f, 0.30f, 0.43f, 1.0f), ICON_FA_TRIANGLE_EXCLAMATION " Please select at least one destination (Desktop, Lock Screen, or Both).");
         }
 
         ImGui::Spacing();
         ImGui::Separator();
-        ImGui::Spacing();
-
-        // 2. Frame & Timestamp Selection
-        if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-        ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_FILM "  Frame & Timestamp Selection:");
-        if (g_fontSemibold) ImGui::PopFont();
 
         float maxTime = static_cast<float>((std::max)(0.1, g_captureModalDuration));
-        
-        // Time Slider
-        int curMin = static_cast<int>(g_captureModalTimeSec) / 60;
-        float curSec = g_captureModalTimeSec - curMin * 60.0f;
-        char sliderFmt[64];
-        sprintf_s(sliderFmt, "%%.2f s  (%02d:%05.2f | Frame #%d)", curMin, curSec, g_captureModalFrameNum);
-        
-        ImGui::SetNextItemWidth(520.0f);
-        if (ImGui::SliderFloat("##TimeSlider", &g_captureModalTimeSec, 0.0f, maxTime, sliderFmt)) {
+
+        // Time Slider (Starlume)
+        if (StarlumeSliderFloat("Preview Time", &g_captureModalTimeSec, 0.0f, maxTime, 2, " s", 520.0f)) {
             g_captureModalFrameNum = static_cast<int>(g_captureModalTimeSec * g_captureModalFps);
             g_captureModalAutoPreviewRequested = true;
             g_captureModalLastChangeTick = GetTickCount64();
         }
-        if (ImGui::IsItemDeactivatedAfterEdit()) {
+        if (ImGui::IsItemDeactivated()) {
             g_captureModalAutoPreviewRequested = false;
             RequestCaptureModalPreview();
         }
@@ -2104,7 +2431,7 @@ static void RenderCaptureFrameModal() {
         ImGui::PopItemWidth();
 
         ImGui::SameLine();
-        if (ImGui::Button(ICON_FA_ROTATE " Preview Frame")) {
+        if (HoloButton(ICON_FA_ROTATE " Preview Frame")) {
             RequestCaptureModalPreview();
         }
         if (ImGui::IsItemHovered()) {
@@ -2113,37 +2440,37 @@ static void RenderCaptureFrameModal() {
 
         // Presets & Snap Button
         ImGui::Spacing();
-        if (ImGui::Button("0s (Start)")) {
+        if (HoloButtonSmall("0s (Start)")) {
             g_captureModalTimeSec = 0.0f;
             g_captureModalFrameNum = 0;
             RequestCaptureModalPreview();
         }
         ImGui::SameLine();
-        if (ImGui::Button("25%")) {
+        if (HoloButtonSmall("25%")) {
             g_captureModalTimeSec = maxTime * 0.25f;
             g_captureModalFrameNum = static_cast<int>(g_captureModalTimeSec * g_captureModalFps);
             RequestCaptureModalPreview();
         }
         ImGui::SameLine();
-        if (ImGui::Button("50% (Middle)")) {
+        if (HoloButtonSmall("50% (Middle)")) {
             g_captureModalTimeSec = maxTime * 0.50f;
             g_captureModalFrameNum = static_cast<int>(g_captureModalTimeSec * g_captureModalFps);
             RequestCaptureModalPreview();
         }
         ImGui::SameLine();
-        if (ImGui::Button("75%")) {
+        if (HoloButtonSmall("75%")) {
             g_captureModalTimeSec = maxTime * 0.75f;
             g_captureModalFrameNum = static_cast<int>(g_captureModalTimeSec * g_captureModalFps);
             RequestCaptureModalPreview();
         }
         ImGui::SameLine();
-        if (ImGui::Button("End")) {
+        if (HoloButtonSmall("End")) {
             g_captureModalTimeSec = (std::max)(0.0f, maxTime - 0.1f);
             g_captureModalFrameNum = static_cast<int>(g_captureModalTimeSec * g_captureModalFps);
             RequestCaptureModalPreview();
         }
         ImGui::SameLine();
-        if (ImGui::Button(ICON_FA_CROSSHAIRS " Snap to Live Video")) {
+        if (HoloButtonSmall(ICON_FA_CROSSHAIRS " Snap to Live Video")) {
             g_captureModalTimeSec = static_cast<float>(g_daemonCurrentTimeSec);
             g_captureModalTimeSec = std::clamp(g_captureModalTimeSec, 0.0f, maxTime);
             g_captureModalFrameNum = static_cast<int>(g_captureModalTimeSec * g_captureModalFps);
@@ -2153,17 +2480,11 @@ static void RenderCaptureFrameModal() {
             ImGui::SetTooltip("Snap time to the exact position currently playing on your desktop");
         }
 
-        // Preview box
+        // Preview box + action buttons side by side
         ImGui::Spacing();
-        float previewBoxW = 320.0f;
-        float previewBoxH = 180.0f;
+        float previewBoxW = 300.0f;
+        float previewBoxH = 169.0f;
         bool isLoadingPreview = g_captureModalPreviewWorkerActive.load() || g_captureModalAutoPreviewRequested;
-
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.75f, 1.0f), "Frame Preview (Selected Time: %.2f s | Frame #%d):", g_captureModalTimeSec, g_captureModalFrameNum);
-        ImGui::SameLine();
-        if (isLoadingPreview) {
-            ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.0f, 1.0f), ICON_FA_ROTATE " Loading preview...");
-        }
 
         ImVec2 p0 = ImGui::GetCursorScreenPos();
         ImVec2 p1 = ImVec2(p0.x + previewBoxW, p0.y + previewBoxH);
@@ -2172,76 +2493,76 @@ static void RenderCaptureFrameModal() {
             ImGui::Image((ImTextureID)g_captureModalPreviewSRV.Get(), ImVec2(previewBoxW, previewBoxH));
             if (isLoadingPreview) {
                 ImDrawList* draw_list = ImGui::GetWindowDrawList();
-                draw_list->AddRectFilled(p0, p1, IM_COL32(10, 12, 16, 140), 4.0f);
-                draw_list->AddRect(p0, p1, IM_COL32(70, 160, 240, 180), 4.0f);
-                draw_list->AddText(ImVec2(p0.x + 95.0f, p0.y + 80.0f), IM_COL32(100, 210, 255, 255), ICON_FA_ROTATE " Loading Frame...");
+                draw_list->AddRectFilled(p0, p1, IM_COL32(9, 12, 21, 150), 4.0f);
+                draw_list->AddRect(p0, p1, IM_COL32(56, 232, 255, 180), 4.0f);
+                draw_list->AddText(ImVec2(p0.x + 95.0f, p0.y + 80.0f), IM_COL32(56, 232, 255, 255), ICON_FA_ROTATE " Loading Frame...");
             }
         } else {
             ImDrawList* draw_list = ImGui::GetWindowDrawList();
-            draw_list->AddRectFilled(p0, p1, IM_COL32(20, 22, 28, 255), 4.0f);
-            draw_list->AddRect(p0, p1, IM_COL32(45, 50, 62, 255), 4.0f);
+            draw_list->AddRectFilled(p0, p1, IM_COL32(17, 23, 38, 255), 4.0f);
+            draw_list->AddRect(p0, p1, IM_COL32(56, 232, 255, 46), 4.0f);
             if (isLoadingPreview) {
-                draw_list->AddText(ImVec2(p0.x + 80.0f, p0.y + 80.0f), IM_COL32(100, 200, 255, 255), ICON_FA_ROTATE " Extracting Preview...");
+                draw_list->AddText(ImVec2(p0.x + 80.0f, p0.y + 80.0f), IM_COL32(56, 232, 255, 255), ICON_FA_ROTATE " Extracting Preview...");
             } else {
-                draw_list->AddText(ImVec2(p0.x + 65.0f, p0.y + 80.0f), IM_COL32(140, 145, 155, 255), "Drag slider to preview frame");
+                draw_list->AddText(ImVec2(p0.x + 65.0f, p0.y + 80.0f), IM_COL32(148, 163, 184, 255), "Drag slider to preview frame");
             }
             ImGui::Dummy(ImVec2(previewBoxW, previewBoxH));
         }
 
-        // Status message if any
-        if (!g_captureModalStatus.empty()) {
+        // Action column beside the preview
+        ImGui::SameLine(0, 18.0f);
+        ImGui::BeginGroup();
+        {
+            bool canApply = (g_captureModalTargetDesktop || g_captureModalTargetLockscreen);
+            if (!canApply) ImGui::BeginDisabled();
+            if (HoloButton(ICON_FA_CHECK "  Capture & Apply Static Wallpaper", ImVec2(320, 40))) {
+                if (g_captureModalTargetDesktop) {
+                    cfg.desktop_static_source_mode = 1;
+                    cfg.desktop_static_video_path = g_captureModalPath;
+                    cfg.desktop_static_timestamp = static_cast<double>(g_captureModalTimeSec);
+                    cfg.update_desktop_wallpaper = true;
+                }
+                if (g_captureModalTargetLockscreen) {
+                    cfg.lockscreen_source_mode = 1;
+                    cfg.lockscreen_video_path = g_captureModalPath;
+                    cfg.lockscreen_timestamp = static_cast<double>(g_captureModalTimeSec);
+                    cfg.update_lockscreen = true;
+                }
+                g_config.Save();
+
+                nlohmann::json req{
+                    {"cmd", "sync_desktop_wallpaper"},
+                    {"path", g_captureModalPath},
+                    {"desktop", g_captureModalTargetDesktop},
+                    {"lockscreen", g_captureModalTargetLockscreen},
+                    {"timestamp", static_cast<double>(g_captureModalTimeSec)},
+                    {"save_mode", 1}
+                };
+                SendIpcAsync(req.dump());
+
+                std::string destStr = (g_captureModalTargetDesktop && g_captureModalTargetLockscreen) ? "Desktop & Lock Screen" :
+                                      (g_captureModalTargetDesktop ? "Desktop Wallpaper" : "Lock Screen");
+                char statusMsg[256];
+                sprintf_s(statusMsg, "Pristine static frame at %.2fs successfully injected to %s!", g_captureModalTimeSec, destStr.c_str());
+                g_captureModalStatus = statusMsg;
+
+                g_showCaptureModal = false;
+                ImGui::CloseCurrentPopup();
+            }
+            if (!canApply) ImGui::EndDisabled();
+
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.0f), "%s", g_captureModalStatus.c_str());
-        }
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        // 3. Action Buttons
-        bool canApply = (g_captureModalTargetDesktop || g_captureModalTargetLockscreen);
-        if (!canApply) ImGui::BeginDisabled();
-        if (ImGui::Button(ICON_FA_CHECK "  Capture & Apply Static Wallpaper", ImVec2(320, 36))) {
-            if (g_captureModalTargetDesktop) {
-                cfg.desktop_static_source_mode = 1;
-                cfg.desktop_static_video_path = g_captureModalPath;
-                cfg.desktop_static_timestamp = static_cast<double>(g_captureModalTimeSec);
-                cfg.update_desktop_wallpaper = true;
+            if (HoloButton("Cancel", ImVec2(320, 36))) {
+                g_showCaptureModal = false;
+                ImGui::CloseCurrentPopup();
             }
-            if (g_captureModalTargetLockscreen) {
-                cfg.lockscreen_source_mode = 1;
-                cfg.lockscreen_video_path = g_captureModalPath;
-                cfg.lockscreen_timestamp = static_cast<double>(g_captureModalTimeSec);
-                cfg.update_lockscreen = true;
+
+            if (!g_captureModalStatus.empty()) {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.0f), "%s", g_captureModalStatus.c_str());
             }
-            g_config.Save();
-
-            nlohmann::json req{
-                {"cmd", "sync_desktop_wallpaper"},
-                {"path", g_captureModalPath},
-                {"desktop", g_captureModalTargetDesktop},
-                {"lockscreen", g_captureModalTargetLockscreen},
-                {"timestamp", static_cast<double>(g_captureModalTimeSec)},
-                {"save_mode", 1}
-            };
-            SendIpcAsync(req.dump());
-
-            std::string destStr = (g_captureModalTargetDesktop && g_captureModalTargetLockscreen) ? "Desktop & Lock Screen" :
-                                  (g_captureModalTargetDesktop ? "Desktop Wallpaper" : "Lock Screen");
-            char statusMsg[256];
-            sprintf_s(statusMsg, "Pristine static frame at %.2fs successfully injected to %s!", g_captureModalTimeSec, destStr.c_str());
-            g_captureModalStatus = statusMsg;
-
-            g_showCaptureModal = false;
-            ImGui::CloseCurrentPopup();
         }
-        if (!canApply) ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(120, 36))) {
-            g_showCaptureModal = false;
-            ImGui::CloseCurrentPopup();
-        }
+        ImGui::EndGroup();
 
         ImGui::EndPopup();
     }
@@ -2296,17 +2617,17 @@ static void RenderOptimizeModal() {
         }
 
         ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.45f, 1.00f),
+        ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f),
             "*Optimizing saves up to 75%% GPU & VRAM with crystal-clear Lanczos downscaling!");
         
         ImGui::Spacing();
-        ImGui::Checkbox("Remember my choice (Auto-downscale in the future)", &g_rememberDownscaleChoice);
+        ToggleSwitch("Remember my choice (Auto-downscale in the future)", &g_rememberDownscaleChoice);
 
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::Button(ICON_FA_DOWNLOAD "  Optimize Video (Recommended)", ImVec2(260, 36))) {
+        if (HoloButton(ICON_FA_DOWNLOAD "  Optimize Video (Recommended)", ImVec2(260, 36))) {
             if (g_rememberDownscaleChoice) {
                 cfg.auto_downscale_highres = true;
                 cfg.prompt_downscale = false;
@@ -2318,7 +2639,7 @@ static void RenderOptimizeModal() {
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Play Original", ImVec2(130, 36))) {
+        if (HoloButton("Play Original", ImVec2(130, 36))) {
             if (g_rememberDownscaleChoice) {
                 auto& cfg = g_config.Get();
                 cfg.auto_downscale_highres = false;
@@ -2331,7 +2652,7 @@ static void RenderOptimizeModal() {
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(100, 36))) {
+        if (HoloButton("Cancel", ImVec2(100, 36))) {
             g_showOptimizeModal = false;
             ImGui::CloseCurrentPopup();
         }
@@ -2343,23 +2664,23 @@ static void RenderOptimizeModal() {
 static void RenderOptimizationProgress() {
     if (!g_video_optimizer.IsRunning()) return;
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.10f, 0.18f, 0.28f, 1.00f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.30f, 0.70f, 1.00f, 1.00f));
-    ImGui::BeginChild("OptProgressBanner", ImVec2(0, 64), true, ImGuiWindowFlags_NoScrollbar);
+    BeginModuleCard("OptProgressBanner", ImVec2(0, 100), 14.0f, ST_CARD_NORMAL, ImGuiWindowFlags_NoScrollbar);
 
     float prog = g_video_optimizer.GetProgress();
     std::string status = g_video_optimizer.GetCurrentStatus();
 
-    ImGui::TextColored(ImVec4(0.55f, 0.75f, 1.00f, 1.00f), ICON_FA_ROTATE "  %s", status.c_str());
-    ImGui::SameLine(ImGui::GetWindowWidth() - 95);
-    if (ImGui::Button("Cancel", ImVec2(80, 0))) {
+    ImGui::TextColored(ImVec4(0.945f, 0.961f, 0.976f, 1.00f), ICON_FA_ROTATE "  %s", status.c_str());
+    ImGui::SameLine(ImGui::GetWindowWidth() - 110);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 5.0f);
+    if (HoloButtonSmall("Cancel")) {
         g_video_optimizer.Cancel();
     }
 
-    ImGui::ProgressBar(prog, ImVec2(-1, 14), "");
+    char progText[32];
+    snprintf(progText, sizeof(progText), "%.0f%%", prog * 100.0f);
+    StarlumeProgress(prog, 14.0f, progText);
 
-    ImGui::EndChild();
-    ImGui::PopStyleColor(2);
+    EndModuleCard();
     ImGui::Spacing();
 }
 
@@ -2660,14 +2981,14 @@ void SettingsUI::RenderFrame() {
         ImVec2 wp = ImGui::GetWindowPos();
         ImVec2 ws = ImGui::GetWindowSize();
         ImDrawList* odl = ImGui::GetWindowDrawList();
-        odl->AddRectFilled(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), IM_COL32(6, 10, 20, 178));
+        odl->AddRectFilled(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), IM_COL32(9, 12, 21, 190));
         ImVec2 f0 = ImVec2(wp.x + 56.0f, wp.y + 64.0f);
         ImVec2 f1 = ImVec2(wp.x + ws.x - 56.0f, wp.y + ws.y - 64.0f);
-        odl->AddRect(f0, f1, IM_COL32(96, 165, 255, 235), 20.0f, 0, 3.0f);
-        odl->AddRect(ImVec2(f0.x + 9.0f, f0.y + 9.0f), ImVec2(f1.x - 9.0f, f1.y - 9.0f), IM_COL32(96, 165, 255, 70), 14.0f, 0, 1.5f);
+        odl->AddRect(f0, f1, IM_COL32(56, 232, 255, 235), 20.0f, 0, 3.0f);
+        odl->AddRect(ImVec2(f0.x + 9.0f, f0.y + 9.0f), ImVec2(f1.x - 9.0f, f1.y - 9.0f), IM_COL32(56, 232, 255, 70), 14.0f, 0, 1.5f);
         ImVec2 ctr = ImVec2((f0.x + f1.x) * 0.5f, (f0.y + f1.y) * 0.5f);
         const char* dropTitle = "Drop video here";
-        const char* dropSub = "MP4  •  WebM  •  MKV  •  AVI  •  MOV";
+        const char* dropSub = "MP4  /  WebM  /  MKV  /  AVI  /  MOV";
         ImGui::SetWindowFontScale(2.4f);
         ImVec2 tIco = ImGui::CalcTextSize(ICON_FA_ARROW_DOWN_TO_LINE);
         ImGui::SetWindowFontScale(1.0f);
@@ -2678,12 +2999,12 @@ void SettingsUI::RenderFrame() {
         float cy = ctr.y - blockH * 0.5f;
         ImGui::SetWindowFontScale(2.4f);
         ImGui::SetCursorScreenPos(ImVec2(ctr.x - tIco.x * 0.5f, cy));
-        ImGui::TextColored(ImVec4(0.55f, 0.75f, 1.00f, 1.00f), ICON_FA_ARROW_DOWN_TO_LINE);
+        ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), ICON_FA_ARROW_DOWN_TO_LINE);
         ImGui::SetWindowFontScale(1.0f);
         ImGui::SetCursorScreenPos(ImVec2(ctr.x - tTitle.x * 0.5f, cy + tIco.y + gap1));
-        ImGui::TextColored(ImVec4(0.95f, 0.96f, 0.98f, 1.0f), "%s", dropTitle);
+        ImGui::TextColored(ImVec4(0.945f, 0.961f, 0.976f, 1.0f), "%s", dropTitle);
         ImGui::SetCursorScreenPos(ImVec2(ctr.x - tSub.x * 0.5f, cy + tIco.y + gap1 + tTitle.y + gap2));
-        ImGui::TextColored(ImVec4(0.60f, 0.65f, 0.74f, 1.0f), "%s", dropSub);
+        ImGui::TextColored(ImVec4(0.580f, 0.639f, 0.722f, 1.0f), "%s", dropSub);
     }
 
     RenderOptimizeModal();
@@ -2692,7 +3013,7 @@ void SettingsUI::RenderFrame() {
     ImGui::End();
 
     ImGui::Render();
-    const float clearColor[4] = { 0.08f, 0.08f, 0.10f, 0.90f };
+    const float clearColor[4] = { 0.035f, 0.047f, 0.082f, 0.94f };
     g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
     g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clearColor);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
