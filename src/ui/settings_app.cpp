@@ -2039,14 +2039,18 @@ static void RenderGeneralSettingsTab() {
 
     float leftX = pageStart.x;
     float rightX = isNarrow ? pageStart.x : (pageStart.x + colW + colGap);
-    float colY = pageStart.y;
-    float colY2 = isNarrow ? 0.0f : pageStart.y;
 
-    // ================= KOLOM KIRI =================
+    static float s_genRow1H = 215.0f;
+    static float s_genRow2H = 250.0f;
+    float row1TargetH = isNarrow ? 0.0f : s_genRow1H;
+    float row2TargetH = isNarrow ? 0.0f : s_genRow2H;
 
-    // KARTU 1: Display Scaling & Multi-Monitor
-    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
-    BeginGlassCard("DisplayCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    // =========================================================================
+    // ROW 1: DISPLAY & SCALING (Kiri) + POWER & OCCLUSION RULES (Kanan)
+    // =========================================================================
+    float row1Top = pageStart.y;
+    ImGui::SetCursorScreenPos(ImVec2(leftX, row1Top));
+    BeginGlassCard("DisplayCard", ImVec2(colW, row1TargetH), cardPadX, cardPadY);
     GlassCardHeader(ICON_FA_EXPAND "  DISPLAY & SCALING");
 
     static const char* scalingModes[] = {
@@ -2055,13 +2059,32 @@ static void RenderGeneralSettingsTab() {
         "Stretch to Screen (Ignore Ratio)"
     };
     int currentMode = cfg.scaling_mode;
+    ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ST_TEXT_DIM), "Video Scaling & Placement");
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
     ImGui::SetNextItemWidth(contentW);
+
+    // Custom stylish dropdown: dark slate frame, glowing cyan border, distinct arrow button
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.078f, 0.118f, 0.196f, 0.95f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.110f, 0.165f, 0.270f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.130f, 0.200f, 0.320f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.220f, 0.910f, 1.000f, 0.55f));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.140f, 0.220f, 0.350f, 0.90f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.220f, 0.910f, 1.000f, 0.40f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.220f, 0.910f, 1.000f, 0.70f));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.067f, 0.090f, 0.150f, 0.98f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.2f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 8.0f));
+
     if (ImGui::Combo("##scalingMode", &currentMode, scalingModes, IM_ARRAYSIZE(scalingModes))) {
         cfg.scaling_mode = currentMode;
         g_config.Save();
         nlohmann::json req{{"cmd", "set_scaling"}, {"mode", currentMode}};
         SendIpcAsync(req.dump());
     }
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(8);
+
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Changes how video fits the screen when aspect ratio differs from display.");
     }
@@ -2071,8 +2094,8 @@ static void RenderGeneralSettingsTab() {
         g_hardwareInfoInit = true;
     }
 
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
     if (g_hardwareInfo.displays.size() > 1) {
-        ImGui::Dummy(ImVec2(0.0f, 6.0f));
         TextDim("Target Desktop Display(s):");
         ImGui::Dummy(ImVec2(0.0f, 2.0f));
 
@@ -2099,13 +2122,55 @@ static void RenderGeneralSettingsTab() {
                 SendIpcAsync(req.dump());
             }
         }
+    } else {
+        if (!g_hardwareInfo.displays.empty()) {
+            const auto& d = g_hardwareInfo.displays[0];
+            ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 0.95f), ICON_FA_DESKTOP "  Active Display: %dx%d (%d Hz)", d.width, d.height, d.refresh_rate > 0 ? d.refresh_rate : 60);
+        }
+        ImGui::Dummy(ImVec2(0.0f, 2.0f));
+        TextDim("Wallpaper automatically fills your primary desktop screen.");
     }
-    colY += EndGlassCard() + colGap;
+    float contentH1 = ImGui::GetCursorPosY() + cardPadY;
+    float h1 = EndGlassCard();
 
-    // KARTU 2: Audio & Playback Output
-    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
-    BeginGlassCard("AudioCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
-    GlassCardHeader(ICON_FA_VOLUME_HIGH "  AUDIO & VOLUME");
+    // KARTU 2 (Kanan): POWER & OCCLUSION RULES
+    float row1RightY = isNarrow ? (row1Top + h1 + colGap) : row1Top;
+    ImGui::SetCursorScreenPos(ImVec2(rightX, row1RightY));
+    BeginGlassCard("PowerCard", ImVec2(colW, row1TargetH), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_BATTERY_HALF "  POWER & OCCLUSION RULES");
+
+    if (ToggleSwitch("Auto-Pause when Fullscreen App/Game is active", &cfg.pause_on_fullscreen)) {
+        g_config.Save();
+    }
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    if (ToggleSwitch("Auto-Pause when Window is Maximized", &cfg.pause_on_maximized)) {
+        g_config.Save();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Pauses wallpaper rendering to release GPU/CPU when desktop is covered.");
+    }
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    if (ToggleSwitch("Auto-Pause on Battery Power (Laptops)", &cfg.pause_on_battery)) {
+        g_config.Save();
+    }
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    TextDim("%s", "Releases 100% GPU/CPU processing when wallpaper is covered.");
+    float contentH2 = ImGui::GetCursorPosY() + cardPadY;
+    float h2 = EndGlassCard();
+
+    if (!isNarrow) {
+        s_genRow1H = (std::max)(contentH1, contentH2);
+    }
+
+    // =========================================================================
+    // ROW 2: AUDIO & SEAMLESS LOOPING (Kiri) + STARTUP & SYSTEM TRAY (Kanan)
+    // =========================================================================
+    float row2Top = isNarrow ? (row1RightY + h2 + colGap) : (row1Top + (std::max)(h1, h2) + colGap);
+
+    // KARTU 3 (Kiri): Audio & Seamless Looping
+    ImGui::SetCursorScreenPos(ImVec2(leftX, row2Top));
+    BeginGlassCard("AudioLoopCard", ImVec2(colW, row2TargetH), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_VOLUME_HIGH "  AUDIO & SEAMLESS LOOPING");
 
     static float volume = 0.0f;
     static bool volume_init = false;
@@ -2122,13 +2187,86 @@ static void RenderGeneralSettingsTab() {
         nlohmann::json req{{"cmd", "set_volume"}, {"volume", volume}};
         SendIpcAsync(req.dump());
     }
-    TextDim("  Controls background video audio volume level.");
-    colY += EndGlassCard() + colGap;
+    TextDim("Controls background video audio volume level.");
 
-    // KARTU 3: Windows Startup
-    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
-    BeginGlassCard("StartupCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
-    GlassCardHeader(ICON_FA_DESKTOP "  WINDOWS STARTUP");
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    if (ToggleSwitch("Enable Auto Smooth Looping (Seamless Crossfade)", &cfg.auto_smooth_loop)) {
+        g_config.Save();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Applies a smooth crossfade transition and time-warp deceleration at loop seams for a seamless continuous loop without hard cuts.");
+    }
+
+    if (cfg.auto_smooth_loop) {
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        const char* loop_presets[] = {
+            "Cinematic Speed Ramp (1.2s)",
+            "Smoothstep S-Curve (0.8s)",
+            "Gentle Flow (1.8s Ambient)",
+            "Instant Snap (0.4s Fast)",
+            "Custom Tuning..."
+        };
+
+        ImGui::SetNextItemWidth(contentW);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.078f, 0.118f, 0.196f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.110f, 0.165f, 0.270f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.130f, 0.200f, 0.320f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.220f, 0.910f, 1.000f, 0.55f));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.140f, 0.220f, 0.350f, 0.90f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.220f, 0.910f, 1.000f, 0.40f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.220f, 0.910f, 1.000f, 0.70f));
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.067f, 0.090f, 0.150f, 0.98f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.2f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 8.0f));
+
+        if (ImGui::Combo("##loop_preset", &cfg.loop_preset, loop_presets, IM_ARRAYSIZE(loop_presets))) {
+            g_config.Save();
+        }
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(8);
+
+        if (cfg.loop_preset == 4) { // Custom Tuning
+            ImGui::Dummy(ImVec2(0.0f, 6.0f));
+            if (StarlumeSliderFloat("Transition Duration", &cfg.smooth_loop_duration, 0.2f, 2.5f, 1, "s", contentW)) {
+                g_config.Save();
+            }
+
+            const char* easing_curves[] = {
+                "Linear (Constant)",
+                "Smoothstep (S-Curve Hermite)",
+                "Sine Wave (Smooth Harmonic)",
+                "Smootherstep (Perlin Ultra-Smooth)"
+            };
+            ImGui::SetNextItemWidth(contentW);
+            if (ImGui::Combo("##loop_easing", &cfg.loop_easing_curve, easing_curves, IM_ARRAYSIZE(easing_curves))) {
+                g_config.Save();
+            }
+
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+            if (ToggleSwitch("Enable Speed Ramping", &cfg.loop_speed_ramp)) {
+                g_config.Save();
+            }
+
+            if (cfg.loop_speed_ramp) {
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                if (StarlumeSliderFloat("Min Speed at Seam", &cfg.loop_min_speed, 0.50f, 0.95f, 2, "x", contentW)) {
+                    g_config.Save();
+                }
+            }
+        }
+    } else {
+        ImGui::Dummy(ImVec2(0.0f, 2.0f));
+        TextDim("Seamless crossfade eliminates hard cuts at video loop seams.");
+    }
+    float contentH3 = ImGui::GetCursorPosY() + cardPadY;
+    float h3 = EndGlassCard();
+
+    // KARTU 4 (Kanan): Windows Startup & System Tray
+    float row2RightY = isNarrow ? (row2Top + h3 + colGap) : row2Top;
+    ImGui::SetCursorScreenPos(ImVec2(rightX, row2RightY));
+    BeginGlassCard("StartupTrayCard", ImVec2(colW, row2TargetH), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_DESKTOP "  STARTUP & SYSTEM TRAY");
 
     static bool startup_inited = false;
     static bool startup_enabled = false;
@@ -2145,102 +2283,26 @@ static void RenderGeneralSettingsTab() {
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Launches MiniWallpaper silently on Windows boot to instantly resume wallpaper.");
     }
-    TextDim("  Runs silently in the system tray when Windows boots.");
-    colY += EndGlassCard() + colGap;
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    TextDim("Runs silently in the system tray when Windows boots.");
 
-    // ================= KOLOM KANAN =================
-    if (isNarrow) colY2 = colY;
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), ICON_FA_CIRCLE_CHECK "  Auto-Saved in Real-Time");
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    TextDim("All preference changes take effect immediately without restart.");
 
-    // KARTU 4: Power & Occlusion Auto-Pause Rules
-    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("PowerCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
-    GlassCardHeader(ICON_FA_BATTERY_HALF "  POWER & OCCLUSION RULES");
-
-    if (ToggleSwitch("Auto-Pause when Fullscreen App/Game is active", &cfg.pause_on_fullscreen)) {
-        g_config.Save();
-    }
-    if (ToggleSwitch("Auto-Pause when Window is Maximized", &cfg.pause_on_maximized)) {
-        g_config.Save();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Pauses wallpaper rendering to release GPU/CPU when desktop is covered.");
-    }
-    if (ToggleSwitch("Auto-Pause on Battery Power (Laptops)", &cfg.pause_on_battery)) {
-        g_config.Save();
-    }
-    colY2 += EndGlassCard() + colGap;
-
-    // KARTU 5: Auto Smooth Looping Engine
-    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("LoopCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
-    GlassCardHeader(ICON_FA_ROTATE "  SEAMLESS LOOPING ENGINE");
-
-    if (ToggleSwitch("Enable Auto Smooth Looping (Seamless Crossfade)", &cfg.auto_smooth_loop)) {
-        g_config.Save();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Applies a smooth crossfade transition and time-warp deceleration at loop seams for a seamless continuous loop without hard cuts.");
-    }
-
-    if (cfg.auto_smooth_loop) {
-        ImGui::Dummy(ImVec2(0.0f, 4.0f));
-        const char* loop_presets[] = {
-            "Cinematic Speed Ramp (1.2s)",
-            "Smoothstep S-Curve (0.8s)",
-            "Gentle Flow (1.8s Ambient)",
-            "Instant Snap (0.4s Fast)",
-            "Custom Tuning..."
-        };
-
-        ImGui::SetNextItemWidth(contentW);
-        if (ImGui::Combo("Preset", &cfg.loop_preset, loop_presets, IM_ARRAYSIZE(loop_presets))) {
-            g_config.Save();
-        }
-
-        if (cfg.loop_preset == 4) { // Custom Tuning
-            ImGui::Dummy(ImVec2(0.0f, 4.0f));
-            if (StarlumeSliderFloat("Transition Duration", &cfg.smooth_loop_duration, 0.2f, 2.5f, 1, "s", contentW)) {
-                g_config.Save();
-            }
-
-            const char* easing_curves[] = {
-                "Linear (Constant)",
-                "Smoothstep (S-Curve Hermite)",
-                "Sine Wave (Smooth Harmonic)",
-                "Smootherstep (Perlin Ultra-Smooth)"
-            };
-            ImGui::SetNextItemWidth(contentW);
-            if (ImGui::Combo("Easing", &cfg.loop_easing_curve, easing_curves, IM_ARRAYSIZE(easing_curves))) {
-                g_config.Save();
-            }
-
-            if (ToggleSwitch("Enable Speed Ramping", &cfg.loop_speed_ramp)) {
-                g_config.Save();
-            }
-
-            if (cfg.loop_speed_ramp) {
-                if (StarlumeSliderFloat("Min Speed at Seam", &cfg.loop_min_speed, 0.50f, 0.95f, 2, "x", contentW)) {
-                    g_config.Save();
-                }
-            }
-        }
-    }
-    colY2 += EndGlassCard() + colGap;
-
-    // KARTU 6: System Tray & Actions
-    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("TrayCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
-    GlassCardHeader(ICON_FA_CIRCLE_CHECK "  STATUS & SYSTEM TRAY");
-
-    ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), "Settings are saved automatically in real-time.");
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
     if (HoloButton(ICON_FA_EYE_SLASH "  Hide Window to Tray", ImVec2(contentW, 0))) {
         SettingsUI::Close();
     }
-    colY2 += EndGlassCard() + colGap;
+    float contentH4 = ImGui::GetCursorPosY() + cardPadY;
+    float h4 = EndGlassCard();
 
-    float finalH = (std::max)(colY, colY2) + 40.0f;
+    if (!isNarrow) {
+        s_genRow2H = (std::max)(contentH3, contentH4);
+    }
+
+    float finalH = (isNarrow ? (row2RightY + h4) : (row2Top + (std::max)(h3, h4))) + 40.0f;
     ImGui::SetCursorScreenPos(ImVec2(leftX, finalH));
     ImGui::Dummy(ImVec2(1.0f, 1.0f));
 }
