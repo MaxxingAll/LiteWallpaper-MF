@@ -37,6 +37,7 @@ ThumbnailManager::ThumbnailManager() {
 
 ThumbnailManager::~ThumbnailManager() {
     m_stop_worker = true;
+    m_queue_cv.notify_all();
     if (m_worker_thread.joinable()) {
         m_worker_thread.join();
     }
@@ -44,10 +45,16 @@ ThumbnailManager::~ThumbnailManager() {
 }
 
 void ThumbnailManager::ReleaseTextures() {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_srv_map.clear();
-    m_requested.clear();
-    m_pending_uploads.clear();
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_srv_map.clear();
+        m_requested.clear();
+        m_pending_uploads.clear();
+    }
+    {
+        std::lock_guard<std::mutex> qlock(m_queue_mutex);
+        m_extract_queue.clear();
+    }
 }
 
 std::string ThumbnailManager::GetCacheDirectory() {
@@ -332,17 +339,18 @@ void ThumbnailManager::WorkerLoop() {
     while (!m_stop_worker.load()) {
         std::string current_video;
         {
-            std::lock_guard<std::mutex> lock(m_queue_mutex);
+            std::unique_lock<std::mutex> lock(m_queue_mutex);
+            m_queue_cv.wait(lock, [this]() {
+                return m_stop_worker.load() || !m_extract_queue.empty();
+            });
+            if (m_stop_worker.load()) break;
             if (!m_extract_queue.empty()) {
                 current_video = m_extract_queue.front();
                 m_extract_queue.pop_front();
             }
         }
 
-        if (current_video.empty()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            continue;
-        }
+        if (current_video.empty()) continue;
 
         std::string thumb_file = GetThumbnailPath(current_video);
         std::vector<uint8_t> bgra_data;
@@ -387,6 +395,7 @@ void ThumbnailManager::Update(ID3D11Device* device) {
     std::deque<PendingUpload> to_upload;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_pending_uploads.empty()) return;
         to_upload.swap(m_pending_uploads);
     }
 
@@ -435,8 +444,11 @@ ID3D11ShaderResourceView* ThumbnailManager::GetThumbnailSRV(ID3D11Device* device
 
         if (m_requested.find(video_path) == m_requested.end()) {
             m_requested[video_path] = true;
-            std::lock_guard<std::mutex> qlock(m_queue_mutex);
-            m_extract_queue.push_back(video_path);
+            {
+                std::lock_guard<std::mutex> qlock(m_queue_mutex);
+                m_extract_queue.push_back(video_path);
+            }
+            m_queue_cv.notify_one();
         }
     }
 

@@ -72,6 +72,37 @@ static uint64_t g_frames_decoded = 0;
 static bool g_fullscreen_paused = false;
 static std::string g_loaded_video_path; // Last video successfully opened in the decoder
 
+// Target display viewport cache (avoids calling EnumDisplayMonitors on every 60 FPS frame)
+static std::vector<DisplayViewport> s_cached_target_vps;
+static std::vector<int>             s_last_target_displays;
+static bool                         s_displays_dirty = true;
+
+static void UpdateTargetViewports(const std::vector<int>& target_displays) {
+    if (!s_displays_dirty && target_displays == s_last_target_displays) {
+        return;
+    }
+    s_cached_target_vps.clear();
+    s_last_target_displays = target_displays;
+    s_displays_dirty = false;
+
+    if (!target_displays.empty()) {
+        auto all_displays = HardwareDetector::GetDisplayList();
+        int virt_x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int virt_y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        for (int disp_idx : target_displays) {
+            if (disp_idx >= 0 && disp_idx < static_cast<int>(all_displays.size())) {
+                const auto& d = all_displays[disp_idx];
+                s_cached_target_vps.push_back({
+                    static_cast<float>(d.pos_x - virt_x),
+                    static_cast<float>(d.pos_y - virt_y),
+                    static_cast<float>(d.width),
+                    static_cast<float>(d.height)
+                });
+            }
+        }
+    }
+}
+
 static int ComputeFrameSkip(double video_fps, int display_fps) {
     if (video_fps <= 0.0 || video_fps > 240.0) return 1;
     if (display_fps <= 0) return 1;
@@ -792,16 +823,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
         if (!g_running) break;
 
         // Render Settings UI if open.
-        // Rate-limited: ~60 fps target when focused, ~15 fps when in background
-        // (avoids burning CPU/GPU on an occluded window, e.g. while gaming).
+        // Rate-limited: ~60 fps target when focused, ~10 fps when in background.
+        // Minimized (iconic) window consumes 0 FPS and 0 CPU/GPU.
         if (SettingsUI::IsOpen()) {
-            static uint64_t last_ui_render_us = 0;
-            uint64_t now_ui_us = g_clock.GetCurrentTimeMicros();
-            bool ui_focused = (GetForegroundWindow() == SettingsUI::GetHwnd());
-            uint64_t ui_interval_us = ui_focused ? 16000 : 66000;
-            if (now_ui_us - last_ui_render_us >= ui_interval_us) {
-                last_ui_render_us = now_ui_us;
-                SettingsUI::RenderFrame();
+            HWND uiHwnd = SettingsUI::GetHwnd();
+            if (uiHwnd && !IsIconic(uiHwnd)) {
+                static uint64_t last_ui_render_us = 0;
+                uint64_t now_ui_us = g_clock.GetCurrentTimeMicros();
+                bool ui_focused = (GetForegroundWindow() == uiHwnd);
+                uint64_t ui_interval_us = ui_focused ? 16000 : 100000;
+                if (now_ui_us - last_ui_render_us >= ui_interval_us) {
+                    last_ui_render_us = now_ui_us;
+                    SettingsUI::RenderFrame();
+                }
             }
         }
 
@@ -871,7 +905,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
         );
 
         // Update Shared Engine State for instant zero-latency UI reads
-        if (now_us - last_state_update_us >= 250000) { // Every 250ms
+        uint64_t state_interval_us = SettingsUI::IsOpen() ? 250000 : 1000000;
+        if (now_us - last_state_update_us >= state_interval_us) {
             last_state_update_us = now_us;
             std::string cur_vid = (!cfg.wallpapers.empty()) ? cfg.wallpapers[0].video_path : "";
             auto info = g_decoder.GetInfo();
@@ -906,10 +941,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
             g_shared_engine_state.SetLastError(g_last_error);
         }
 
-        // Periodic process working set memory trimming every 1 second
-        if (now_us - last_trim_us >= 1000000) {
+        // Periodic process working set memory trimming every 30 seconds during active playback
+        // (Avoids frequent page fault thrashing while keeping memory minimal)
+        if (now_us - last_trim_us >= 30000000) {
             last_trim_us = now_us;
             TrimWorkingSetMemory();
+        }
+
+        // When no active wallpaper is loaded or playback is unconfigured, sleep to consume 0% CPU
+        if (!has_active_wallpaper) {
+            HWND uiHwnd = SettingsUI::IsOpen() ? SettingsUI::GetHwnd() : nullptr;
+            DWORD idleWaitMs = (uiHwnd && GetForegroundWindow() == uiHwnd) ? 16 : 100;
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, idleWaitMs, QS_ALLINPUT);
+            continue;
         }
 
         // Window guard: Never render to a detached top-level window (prevents white empty window)
@@ -1127,25 +1171,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
                         g_clock.SetSpeedMultiplier(1.0);
                     }
 
-                    std::vector<DisplayViewport> target_vps;
-                    if (!cfg.target_displays.empty()) {
-                        auto all_displays = HardwareDetector::GetDisplayList();
-                        int virt_x = GetSystemMetrics(SM_XVIRTUALSCREEN);
-                        int virt_y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-                        for (int disp_idx : cfg.target_displays) {
-                            if (disp_idx >= 0 && disp_idx < static_cast<int>(all_displays.size())) {
-                                const auto& d = all_displays[disp_idx];
-                                target_vps.push_back({
-                                    static_cast<float>(d.pos_x - virt_x),
-                                    static_cast<float>(d.pos_y - virt_y),
-                                    static_cast<float>(d.width),
-                                    static_cast<float>(d.height)
-                                });
-                            }
-                        }
-                    }
-
-                    g_presenter.RenderFrame(g_current_frame.texture, g_current_frame.texture_index, cfg.scaling_mode, target_vps, blend_alpha);
+                    UpdateTargetViewports(cfg.target_displays);
+                    g_presenter.RenderFrame(g_current_frame.texture, g_current_frame.texture_index, cfg.scaling_mode, s_cached_target_vps, blend_alpha);
 
                     if (FAILED(g_presenter.Present(0))) {
                         if (g_last_error.empty()) {
@@ -1165,6 +1192,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
                         g_audio.PushSamples(audio_buffer, samples);
                     }
                 }
+            } else {
+                // If decode failed or at end of stream, yield briefly to avoid spinning CPU
+                MsgWaitForMultipleObjects(0, nullptr, FALSE, 8, QS_ALLINPUT);
             }
         } else {
             DWORD sleepMs = g_clock.GetSleepDurationMs();
@@ -1261,6 +1291,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
 
         case WM_DISPLAYCHANGE: {
+            s_displays_dirty = true;
             RECT rc = {};
             int w = 0, h = 0;
             HWND parent = g_injector.GetWorkerW();

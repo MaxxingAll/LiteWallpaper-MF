@@ -80,10 +80,6 @@ static int    g_daemonActiveGpuIndex = 0;
 static uint64_t g_daemonFramesRendered = 0;
 static std::string g_daemonLastError = "";
 
-static std::vector<float> g_cpuHistory(60, 0.0f);
-static std::vector<float> g_ramHistory(60, 0.0f);
-static std::vector<float> g_vramHistory(60, 0.0f);
-
 // Modal state for video optimization prompt
 static bool g_showOptimizeModal = false;
 static std::string g_pendingOptimizePath;
@@ -465,6 +461,11 @@ static LRESULT WINAPI SettingsWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 }
 
 static void FetchDaemonStatus() {
+    static uint64_t s_lastFetchTick = 0;
+    uint64_t now = GetTickCount64();
+    if (now - s_lastFetchTick < 200) return; // 5Hz sampling rate avoids CPU busywork
+    s_lastFetchTick = now;
+
     g_daemonConnected = g_shared_engine_state.connected.load();
     g_daemonPlaying = g_shared_engine_state.playing.load();
     g_daemonPaused = g_shared_engine_state.paused.load();
@@ -484,15 +485,6 @@ static void FetchDaemonStatus() {
     g_daemonActiveGpuIndex = g_shared_engine_state.active_gpu_index.load();
     g_daemonFramesRendered = g_shared_engine_state.frames_rendered.load();
     g_daemonLastError = g_shared_engine_state.GetLastError();
-
-    g_ramHistory.erase(g_ramHistory.begin());
-    g_ramHistory.push_back(static_cast<float>(g_daemonRamMB));
-
-    g_cpuHistory.erase(g_cpuHistory.begin());
-    g_cpuHistory.push_back(static_cast<float>(g_daemonCpuPercent));
-
-    g_vramHistory.erase(g_vramHistory.begin());
-    g_vramHistory.push_back(static_cast<float>(g_daemonVramMB));
 }
 
 static void OpenCaptureModal(const std::string& video_path, int targetFilter = 0);
@@ -3549,7 +3541,7 @@ static void RenderCustomTitleBar(float winWidth, float titleBarH) {
 }
 
 void SettingsUI::RenderFrame() {
-    if (!g_isOpen || !g_hWnd || !IsWindowVisible(g_hWnd) || !g_pd3dDeviceContext || !g_mainRenderTargetView) return;
+    if (!g_isOpen || !g_hWnd || !IsWindowVisible(g_hWnd) || IsIconic(g_hWnd) || !g_pd3dDeviceContext || !g_mainRenderTargetView) return;
 
     FetchDaemonStatus();
     ThumbnailManager::Instance().Update(g_pd3dDevice);
@@ -3664,6 +3656,8 @@ void SettingsUI::Close() {
         ShowWindow(g_hWnd, SW_HIDE);
     }
     g_isOpen = false;
+    ThumbnailManager::Instance().ReleaseTextures();
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
 }
 
 void SettingsUI::Shutdown() {

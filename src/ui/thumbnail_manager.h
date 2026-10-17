@@ -8,6 +8,7 @@
 #include <thread>
 #include <atomic>
 #include <deque>
+#include <condition_variable>
 
 using Microsoft::WRL::ComPtr;
 
@@ -72,6 +73,7 @@ private:
     std::atomic<bool> m_stop_worker{false};
     std::deque<std::string> m_extract_queue;
     std::mutex m_queue_mutex;
+    std::condition_variable m_queue_cv;
     std::thread m_worker_thread;
 
     void WorkerLoop();
