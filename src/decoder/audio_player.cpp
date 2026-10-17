@@ -7,7 +7,7 @@
 #include <audioclient.h>
 #include <algorithm>
 
-namespace litewp {
+namespace miniwp {
 
 // Max 200ms buffer capacity for 48000Hz stereo (48000 * 2 * 0.2 = ~19200 floats)
 static constexpr size_t MAX_SAMPLE_BUFFER_FLOATS = 19200;
@@ -249,4 +249,4 @@ void AudioPlayer::AudioThread() {
     }
 }
 
-} // namespace litewp
+} // namespace miniwp

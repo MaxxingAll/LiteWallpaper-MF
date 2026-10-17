@@ -3,7 +3,7 @@
 
 #define WM_APP_TRAYICON (WM_APP + 1)
 
-namespace litewp {
+namespace miniwp {
 
 // Callback action triggered from system tray menu
 enum class TrayAction {
@@ -40,4 +40,4 @@ private:
     void ShowContextMenu(HWND hwnd);
 };
 
-} // namespace litewp
+} // namespace miniwp

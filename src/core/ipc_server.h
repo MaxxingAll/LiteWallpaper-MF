@@ -4,7 +4,7 @@
 #include <thread>
 #include <atomic>
 
-namespace litewp {
+namespace miniwp {
 
 // Pipe name: \\.\pipe\MiniWallpaper
 constexpr const wchar_t* PIPE_NAME = L"\\\\.\\pipe\\MiniWallpaper";
@@ -49,4 +49,4 @@ private:
     void* m_pipe_handle = nullptr; // Client pipe handle (HANDLE)
 };
 
-} // namespace litewp
+} // namespace miniwp

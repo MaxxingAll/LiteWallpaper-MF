@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <vector>
 
-namespace litewp {
+namespace miniwp {
 
 IpcServer::IpcServer() = default;
 
@@ -167,4 +167,4 @@ std::string IpcClient::SendRequest(const std::string& request_json) {
     return std::string(buffer.data(), bytesRead);
 }
 
-} // namespace litewp
+} // namespace miniwp

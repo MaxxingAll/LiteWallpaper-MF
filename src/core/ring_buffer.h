@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace litewp {
+namespace miniwp {
 
 // Lock-free single-producer single-consumer ring buffer for compressed video packets
 // Default: 4 slots, 256 KB per slot (compressed H.264/HEVC frames are ~30-150 KB)
@@ -70,4 +70,4 @@ private:
     std::atomic<size_t> m_write{0};
 };
 
-} // namespace litewp
+} // namespace miniwp

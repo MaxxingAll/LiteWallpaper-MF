@@ -11,7 +11,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace litewp {
+namespace miniwp {
 
 static std::string WideToUtf8(const std::wstring& wstr) {
     if (wstr.empty()) return std::string();
@@ -374,4 +374,4 @@ void WindowsAutostart::MigrateLegacy() {
     }
 }
 
-} // namespace litewp
+} // namespace miniwp

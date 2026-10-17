@@ -9,7 +9,7 @@
 #include <condition_variable>
 #include <thread>
 
-namespace litewp {
+namespace miniwp {
 
 class LockScreenManager {
 public:
@@ -135,4 +135,4 @@ private:
     );
 };
 
-} // namespace litewp
+} // namespace miniwp

@@ -1,6 +1,6 @@
 #include "tray_icon.h"
 
-namespace litewp {
+namespace miniwp {
 
 TrayIcon::TrayIcon() = default;
 
@@ -91,4 +91,4 @@ void TrayIcon::Destroy() {
     }
 }
 
-} // namespace litewp
+} // namespace miniwp

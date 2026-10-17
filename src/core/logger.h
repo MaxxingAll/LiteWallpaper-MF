@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <shlobj.h>
 
-namespace litewp {
+namespace miniwp {
 
 // Minimal diagnostic logger. Appends timestamped lines to
 // %APPDATA%\MiniWallpaper\engine.log and mirrors them to the debugger.
@@ -64,4 +64,4 @@ private:
     std::ofstream m_file;
 };
 
-} // namespace litewp
+} // namespace miniwp

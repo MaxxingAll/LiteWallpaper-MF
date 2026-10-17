@@ -3,7 +3,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace litewp {
+namespace miniwp {
 
 struct CpuInfo {
     std::string model_name;
@@ -53,4 +53,4 @@ public:
     static void MigrateLegacy();
 };
 
-} // namespace litewp
+} // namespace miniwp

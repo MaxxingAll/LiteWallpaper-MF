@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 
-namespace litewp {
+namespace miniwp {
 
 class SettingsUI {
 public:
@@ -24,4 +24,4 @@ public:
     static HWND GetHwnd();
 };
 
-} // namespace litewp
+} // namespace miniwp

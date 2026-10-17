@@ -44,7 +44,7 @@ namespace fs = std::filesystem;
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-namespace litewp {
+namespace miniwp {
 
 static HWND                     g_hWnd = nullptr;
 static HINSTANCE                g_hInstance = nullptr;
@@ -3064,4 +3064,4 @@ HWND SettingsUI::GetHwnd() {
     return g_hWnd;
 }
 
-} // namespace litewp
+} // namespace miniwp

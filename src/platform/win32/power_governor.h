@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 
-namespace litewp {
+namespace miniwp {
 
 enum class PowerState {
     Active,         // Desktop visible, no fullscreen app → render at target FPS
@@ -69,4 +69,4 @@ private:
     bool IsOnBattery();
 };
 
-} // namespace litewp
+} // namespace miniwp

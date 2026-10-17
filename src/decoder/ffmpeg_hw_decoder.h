@@ -17,7 +17,7 @@ extern "C" {
 #include <libswresample/swresample.h>
 }
 
-namespace litewp {
+namespace miniwp {
 
 class FFmpegHWDecoder : public IVideoDecoder {
 public:
@@ -77,4 +77,4 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> m_sw_texture;
 };
 
-} // namespace litewp
+} // namespace miniwp

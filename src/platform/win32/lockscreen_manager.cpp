@@ -35,7 +35,7 @@ extern "C" {
 
 using Microsoft::WRL::ComPtr;
 
-namespace litewp {
+namespace miniwp {
 
 static std::string WideToUtf8(const std::wstring& wstr) {
     if (wstr.empty()) return std::string();
@@ -941,4 +941,4 @@ void LockScreenManager::OpenWindowsScreensaverSettings() {
     ShellExecuteW(nullptr, L"open", L"control.exe", L"desk.cpl,,@screensaver", nullptr, SW_SHOWNORMAL);
 }
 
-} // namespace litewp
+} // namespace miniwp

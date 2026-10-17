@@ -21,7 +21,7 @@ extern "C" {
 
 namespace fs = std::filesystem;
 
-namespace litewp {
+namespace miniwp {
 
 VideoOptimizer g_video_optimizer;
 
@@ -688,4 +688,4 @@ void VideoOptimizer::TranscodeWorker(
     }
 }
 
-} // namespace litewp
+} // namespace miniwp

@@ -14,7 +14,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace litewp {
+namespace miniwp {
 
 struct DisplayViewport {
     float x = 0.0f;
@@ -111,4 +111,4 @@ private:
     bool CreateSwapChain(HWND hwnd, int width, int height);
 };
 
-} // namespace litewp
+} // namespace miniwp

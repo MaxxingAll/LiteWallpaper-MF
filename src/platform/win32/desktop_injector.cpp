@@ -3,7 +3,7 @@
 
 #define WM_APP_ATTACH (WM_APP + 11)
 
-namespace litewp {
+namespace miniwp {
 
 static UINT g_taskbar_created_msg = 0;
 
@@ -238,4 +238,4 @@ UINT DesktopInjector::GetTaskbarRestartMsg() const {
     return m_taskbar_restart_msg;
 }
 
-} // namespace litewp
+} // namespace miniwp

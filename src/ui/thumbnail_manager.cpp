@@ -15,7 +15,7 @@ extern "C" {
 
 namespace fs = std::filesystem;
 
-namespace litewp {
+namespace miniwp {
 
 static uint64_t HashString(const std::string& str) {
     uint64_t hash = 14695981039346656037ULL;
@@ -443,4 +443,4 @@ ID3D11ShaderResourceView* ThumbnailManager::GetThumbnailSRV(ID3D11Device* device
     return nullptr;
 }
 
-} // namespace litewp
+} // namespace miniwp

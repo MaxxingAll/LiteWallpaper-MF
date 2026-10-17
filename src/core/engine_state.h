@@ -5,7 +5,7 @@
 #include <string>
 #include <mutex>
 
-namespace litewp {
+namespace miniwp {
 
 struct EngineState {
     std::atomic<bool>     connected{true};
@@ -73,4 +73,4 @@ struct EngineState {
 
 extern EngineState g_shared_engine_state;
 
-} // namespace litewp
+} // namespace miniwp

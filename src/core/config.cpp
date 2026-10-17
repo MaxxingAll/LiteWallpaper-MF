@@ -7,7 +7,7 @@
 #include <sstream>
 #include <algorithm>
 
-namespace litewp {
+namespace miniwp {
 
 Config g_config;
 
@@ -185,4 +185,4 @@ const AppConfig& Config::Get() const {
     return m_config;
 }
 
-} // namespace litewp
+} // namespace miniwp

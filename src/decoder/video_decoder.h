@@ -5,7 +5,7 @@
 struct ID3D11Texture2D;
 struct ID3D11Device;
 
-namespace litewp {
+namespace miniwp {
 
 struct VideoFrame {
     ID3D11Texture2D* texture = nullptr;  // GPU texture (NV12 format in VRAM)
@@ -55,4 +55,4 @@ public:
     virtual void FlushBuffers() {}
 };
 
-} // namespace litewp
+} // namespace miniwp

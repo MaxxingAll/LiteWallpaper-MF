@@ -3,7 +3,7 @@
 #include <vector>
 #include <string>
 
-namespace litewp {
+namespace miniwp {
 
 struct MonitorInfo {
     HMONITOR handle = nullptr;
@@ -58,4 +58,4 @@ private:
     static LRESULT CALLBACK MsgReceiverWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 };
 
-} // namespace litewp
+} // namespace miniwp

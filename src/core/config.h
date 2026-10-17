@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-namespace litewp {
+namespace miniwp {
 
 struct MonitorWallpaper {
     std::string monitor_id;      // Windows monitor device path
@@ -211,4 +211,4 @@ inline void from_json(const nlohmann::json& j, AppConfig& c) {
 
 extern Config g_config;
 
-} // namespace litewp
+} // namespace miniwp

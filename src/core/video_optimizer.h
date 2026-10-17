@@ -5,7 +5,7 @@
 #include <thread>
 #include <mutex>
 
-namespace litewp {
+namespace miniwp {
 
 struct VideoProbeResult {
     bool valid = false;
@@ -78,4 +78,4 @@ private:
 
 extern VideoOptimizer g_video_optimizer;
 
-} // namespace litewp
+} // namespace miniwp

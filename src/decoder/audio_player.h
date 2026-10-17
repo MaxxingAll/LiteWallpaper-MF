@@ -4,7 +4,7 @@
 #include <vector>
 #include <mutex>
 
-namespace litewp {
+namespace miniwp {
 
 class AudioPlayer {
 public:
@@ -42,4 +42,4 @@ private:
     void AudioThread();
 };
 
-} // namespace litewp
+} // namespace miniwp

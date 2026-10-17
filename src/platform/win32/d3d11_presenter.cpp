@@ -3,7 +3,7 @@
 #include <iostream>
 #include "stb/stb_image_write.h"
 
-namespace litewp {
+namespace miniwp {
 
 struct ScalingData {
     float uv_scale[2];
@@ -734,4 +734,4 @@ void D3D11Presenter::Cleanup() {
     m_device.Reset();
 }
 
-} // namespace litewp
+} // namespace miniwp

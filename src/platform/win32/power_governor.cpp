@@ -8,7 +8,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace litewp {
+namespace miniwp {
 
 static std::string FormatWindowInfo(HWND hwnd, const char* prefix = "") {
     if (!hwnd || !IsWindow(hwnd)) return "None";
@@ -371,4 +371,4 @@ int PowerGovernor::QueryGpuVramPercent(ID3D11Device* d3d_device) {
     return 0;
 }
 
-} // namespace litewp
+} // namespace miniwp

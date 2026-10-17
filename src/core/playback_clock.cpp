@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <algorithm>
 
-namespace litewp {
+namespace miniwp {
 
 PlaybackClock::PlaybackClock() {
     SetTargetFPS(30);
@@ -80,4 +80,4 @@ int64_t PlaybackClock::GetCurrentTimeMicros() {
     return static_cast<int64_t>((counts / freq) * 1000000ULL + ((counts % freq) * 1000000ULL) / freq);
 }
 
-} // namespace litewp
+} // namespace miniwp

@@ -11,7 +11,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace litewp {
+namespace miniwp {
 
 class ThumbnailManager {
 public:
@@ -79,4 +79,4 @@ private:
     static std::string GetCacheDirectory();
 };
 
-} // namespace litewp
+} // namespace miniwp

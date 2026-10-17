@@ -39,7 +39,7 @@ namespace fs = std::filesystem;
 #define WM_APP_ATTACH        (WM_APP + 11)
 #define WM_APP_DEATTACH      (WM_APP + 12)
 
-using namespace litewp;
+using namespace miniwp;
 
 // Global engine state
 static PlaybackClock     g_clock;

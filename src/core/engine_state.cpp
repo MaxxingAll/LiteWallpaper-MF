@@ -1,7 +1,7 @@
 #include "engine_state.h"
 
-namespace litewp {
+namespace miniwp {
 
 EngineState g_shared_engine_state;
 
-} // namespace litewp
+} // namespace miniwp

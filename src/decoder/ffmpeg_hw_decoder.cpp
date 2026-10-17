@@ -10,7 +10,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace litewp {
+namespace miniwp {
 
 static AVPixelFormat GetHWFormat(AVCodecContext* ctx, const AVPixelFormat* pix_fmts) {
     for (const AVPixelFormat* p = pix_fmts; *p != AV_PIX_FMT_NONE; p++) {
@@ -512,4 +512,4 @@ void FFmpegHWDecoder::Close() {
     m_info = VideoInfo{};
 }
 
-} // namespace litewp
+} // namespace miniwp
