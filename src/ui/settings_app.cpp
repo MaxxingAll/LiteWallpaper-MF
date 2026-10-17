@@ -277,8 +277,8 @@ static void ApplyAction(std::string utf8_path, std::string action) {
     }
 
     if (utf8_path.empty()) return;
-    if (utf8_path.find("\\LiteWallpaper\\optimized\\") == std::string::npos &&
-        utf8_path.find("/LiteWallpaper/optimized/") == std::string::npos &&
+    if (utf8_path.find("\\MiniWallpaper\\optimized\\") == std::string::npos &&
+        utf8_path.find("/MiniWallpaper/optimized/") == std::string::npos &&
         utf8_path.find("\\optimized\\") == std::string::npos &&
         utf8_path.find("/optimized/") == std::string::npos) {
         g_config.Get().AddToGallery(utf8_path);
@@ -1290,7 +1290,7 @@ static void RenderLockscreenTab() {
         scr_checked = true;
     }
 
-    if (ImGui::Checkbox("Enable LiteWallpaper as Windows Screensaver", &scr_installed)) {
+    if (ImGui::Checkbox("Enable MiniWallpaper as Windows Screensaver", &scr_installed)) {
         if (scr_installed) {
             wchar_t exePathBuf[MAX_PATH] = {};
             GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
@@ -1437,13 +1437,13 @@ static void RenderGeneralSettingsTab() {
         startup_inited = true;
     }
 
-    if (ImGui::Checkbox("Start LiteWallpaper automatically on Windows Boot", &startup_enabled)) {
+    if (ImGui::Checkbox("Start MiniWallpaper automatically on Windows Boot", &startup_enabled)) {
         WindowsAutostart::SetEnabled(startup_enabled, 0);
         cfg.run_on_startup = startup_enabled;
         g_config.Save();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Launches LiteWallpaper silently in the background when Windows starts, seamlessly resuming your wallpaper.");
+        ImGui::SetTooltip("Launches MiniWallpaper silently in the background when Windows starts, seamlessly resuming your wallpaper.");
     }
 
     ImGui::Spacing();
@@ -1853,7 +1853,7 @@ static void RenderPerformancePanel() {
     if (ImGui::Button(ICON_FA_FOLDER_OPEN "  Open Engine Log (Notepad)", ImVec2(280, 0))) {
         const char* appData = getenv("APPDATA");
         if (appData) {
-            std::string logPath = std::string(appData) + "\\LiteWallpaper\\engine.log";
+            std::string logPath = std::string(appData) + "\\MiniWallpaper\\engine.log";
             ShellExecuteA(nullptr, "open", "notepad.exe", logPath.c_str(), nullptr, SW_SHOW);
         }
     }
@@ -2478,7 +2478,7 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
         LoadIconW(hInstance, MAKEINTRESOURCEW(1)),
         LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)), // IDC_ARROW
         nullptr, nullptr,
-        L"LiteWallpaper_SettingsClass",
+        L"MiniWallpaper_SettingsClass",
         nullptr
     };
     RegisterClassExW(&wc);
@@ -2514,7 +2514,7 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
     g_hWnd = CreateWindowExW(
         WS_EX_LAYERED,
         wc.lpszClassName,
-        L"LiteWallpaper v1.2.0",
+        L"MiniWallpaper v2.0.0",
         WS_OVERLAPPEDWINDOW,
         winX, winY, winW, winH,
         nullptr, nullptr, wc.hInstance, nullptr
@@ -2635,7 +2635,7 @@ void SettingsUI::RenderFrame() {
                              ImGuiWindowFlags_NoCollapse |
                              ImGuiWindowFlags_NoBringToFrontOnFocus;
 
-    ImGui::Begin("LiteWallpaper Control Panel", nullptr, flags);
+    ImGui::Begin("MiniWallpaper Control Panel", nullptr, flags);
 
     RenderOptimizationProgress();
 
@@ -2734,7 +2734,7 @@ void SettingsUI::Shutdown() {
 
     if (g_hWnd) {
         DestroyWindow(g_hWnd);
-        UnregisterClassW(L"LiteWallpaper_SettingsClass", g_hInstance);
+        UnregisterClassW(L"MiniWallpaper_SettingsClass", g_hInstance);
         g_hWnd = nullptr;
     }
 }

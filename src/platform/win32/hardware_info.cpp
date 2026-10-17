@@ -179,7 +179,7 @@ SystemHardwareInfo HardwareDetector::QuerySystemInfo() {
 static std::wstring GetStartupShortcutPath() {
     wchar_t path[MAX_PATH] = {};
     if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_STARTUP, nullptr, 0, path))) {
-        return std::wstring(path) + L"\\LiteWallpaper.lnk";
+        return std::wstring(path) + L"\\MiniWallpaper.lnk";
     }
     return L"";
 }
@@ -199,7 +199,7 @@ static bool CreateStartupShortcut(const std::wstring& exePath, const std::wstrin
         wchar_t* lastSlash = wcsrchr(exeDir, L'\\');
         if (lastSlash) *lastSlash = L'\0';
         shellLink->SetWorkingDirectory(exeDir);
-        shellLink->SetDescription(L"LiteWallpaper Animated Video Wallpaper Engine");
+        shellLink->SetDescription(L"MiniWallpaper Animated Video Wallpaper Engine");
         shellLink->SetIconLocation(exePath.c_str(), 0);
 
         ComPtr<IPersistFile> persistFile;
@@ -231,7 +231,7 @@ bool WindowsAutostart::IsEnabled() {
     wchar_t val[MAX_PATH] = {};
     DWORD size = sizeof(val);
     DWORD type = 0;
-    LSTATUS res = RegQueryValueExW(hKey, L"LiteWallpaper", nullptr, &type, reinterpret_cast<LPBYTE>(val), &size);
+    LSTATUS res = RegQueryValueExW(hKey, L"MiniWallpaper", nullptr, &type, reinterpret_cast<LPBYTE>(val), &size);
     RegCloseKey(hKey);
     return (res == ERROR_SUCCESS);
 }
@@ -249,7 +249,7 @@ bool WindowsAutostart::SetEnabled(bool enable, int /*priority*/) {
         HKEY hKey = nullptr;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE | KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS) {
             std::wstring cmd = L"\"" + exeStr + L"\" --startup";
-            RegSetValueExW(hKey, L"LiteWallpaper", 0, REG_SZ, reinterpret_cast<const BYTE*>(cmd.c_str()), static_cast<DWORD>((cmd.length() + 1) * sizeof(wchar_t)));
+            RegSetValueExW(hKey, L"MiniWallpaper", 0, REG_SZ, reinterpret_cast<const BYTE*>(cmd.c_str()), static_cast<DWORD>((cmd.length() + 1) * sizeof(wchar_t)));
             RegCloseKey(hKey);
         }
 
@@ -258,7 +258,7 @@ bool WindowsAutostart::SetEnabled(bool enable, int /*priority*/) {
         if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run",
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, &hApprovedRun, nullptr) == ERROR_SUCCESS) {
             BYTE enabledBytes[12] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-            RegSetValueExW(hApprovedRun, L"LiteWallpaper", 0, REG_BINARY, enabledBytes, sizeof(enabledBytes));
+            RegSetValueExW(hApprovedRun, L"MiniWallpaper", 0, REG_BINARY, enabledBytes, sizeof(enabledBytes));
             RegCloseKey(hApprovedRun);
         }
 
@@ -274,14 +274,14 @@ bool WindowsAutostart::SetEnabled(bool enable, int /*priority*/) {
         // Remove from Registry HKCU\Run
         HKEY hKey = nullptr;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
-            RegDeleteValueW(hKey, L"LiteWallpaper");
+            RegDeleteValueW(hKey, L"MiniWallpaper");
             RegCloseKey(hKey);
         }
 
         // Clean up from StartupApproved keys
         HKEY hApprovedRun = nullptr;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run", 0, KEY_SET_VALUE, &hApprovedRun) == ERROR_SUCCESS) {
-            RegDeleteValueW(hApprovedRun, L"LiteWallpaper");
+            RegDeleteValueW(hApprovedRun, L"MiniWallpaper");
             RegCloseKey(hApprovedRun);
         }
     }
@@ -304,7 +304,7 @@ void WindowsAutostart::AutoRepairIfMoved(int priority) {
         wchar_t val[MAX_PATH * 2] = {};
         DWORD size = sizeof(val);
         DWORD type = 0;
-        if (RegQueryValueExW(hKey, L"LiteWallpaper", nullptr, &type, reinterpret_cast<LPBYTE>(val), &size) == ERROR_SUCCESS) {
+        if (RegQueryValueExW(hKey, L"MiniWallpaper", nullptr, &type, reinterpret_cast<LPBYTE>(val), &size) == ERROR_SUCCESS) {
             std::wstring regVal(val);
             if (regVal.find(currentExe) == std::wstring::npos) {
                 needsRepair = true;
@@ -317,6 +317,60 @@ void WindowsAutostart::AutoRepairIfMoved(int priority) {
 
     if (needsRepair) {
         SetEnabled(true, priority);
+    }
+}
+
+// One-time rebranding migration: move HKCU\Run + StartupApproved\Run entries
+// from "LiteWallpaper" to "MiniWallpaper" and delete the legacy startup-folder shortcut.
+void WindowsAutostart::MigrateLegacy() {
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        wchar_t legacyVal[MAX_PATH * 2] = {};
+        DWORD legacySize = sizeof(legacyVal);
+        DWORD type = 0;
+        bool legacySet = (RegQueryValueExW(hKey, L"LiteWallpaper", nullptr, &type, reinterpret_cast<LPBYTE>(legacyVal), &legacySize) == ERROR_SUCCESS);
+
+        if (legacySet) {
+            wchar_t newVal[MAX_PATH * 2] = {};
+            DWORD newSize = sizeof(newVal);
+            bool newSet = (RegQueryValueExW(hKey, L"MiniWallpaper", nullptr, &type, reinterpret_cast<LPBYTE>(newVal), &newSize) == ERROR_SUCCESS);
+
+            if (!newSet) {
+                // Re-point the entry to the current executable (it was just renamed)
+                wchar_t exePath[MAX_PATH] = {};
+                GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+                std::wstring cmd = L"\"" + std::wstring(exePath) + L"\" --startup";
+                RegSetValueExW(hKey, L"MiniWallpaper", 0, REG_SZ, reinterpret_cast<const BYTE*>(cmd.c_str()), static_cast<DWORD>((cmd.length() + 1) * sizeof(wchar_t)));
+            }
+            RegDeleteValueW(hKey, L"LiteWallpaper");
+        }
+        RegCloseKey(hKey);
+    }
+
+    HKEY hApprovedRun = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run", 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hApprovedRun) == ERROR_SUCCESS) {
+        BYTE legacyBytes[12] = {};
+        DWORD legacySize = sizeof(legacyBytes);
+        DWORD type = 0;
+        bool legacySet = (RegQueryValueExW(hApprovedRun, L"LiteWallpaper", nullptr, &type, legacyBytes, &legacySize) == ERROR_SUCCESS);
+
+        if (legacySet) {
+            BYTE newBytes[12] = {};
+            DWORD newSize = sizeof(newBytes);
+            bool newSet = (RegQueryValueExW(hApprovedRun, L"MiniWallpaper", nullptr, &type, newBytes, &newSize) == ERROR_SUCCESS);
+            if (!newSet) {
+                RegSetValueExW(hApprovedRun, L"MiniWallpaper", 0, REG_BINARY, legacyBytes, legacySize);
+            }
+            RegDeleteValueW(hApprovedRun, L"LiteWallpaper");
+        }
+        RegCloseKey(hApprovedRun);
+    }
+
+    // Remove legacy startup-folder shortcut (old branding filename)
+    wchar_t startupPath[MAX_PATH] = {};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_STARTUP, nullptr, 0, startupPath))) {
+        std::wstring legacyShortcut = std::wstring(startupPath) + L"\\LiteWallpaper.lnk";
+        DeleteFileW(legacyShortcut.c_str());
     }
 }
 

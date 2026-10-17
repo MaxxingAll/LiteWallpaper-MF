@@ -66,8 +66,8 @@ struct AppConfig {
 
     void AddToGallery(const std::string& path) {
         if (path.empty()) return;
-        if (path.find("\\LiteWallpaper\\optimized\\") != std::string::npos ||
-            path.find("/LiteWallpaper/optimized/") != std::string::npos ||
+        if (path.find("\\MiniWallpaper\\optimized\\") != std::string::npos ||
+            path.find("/MiniWallpaper/optimized/") != std::string::npos ||
             path.find("\\optimized\\") != std::string::npos ||
             path.find("/optimized/") != std::string::npos) {
             return;
@@ -99,7 +99,7 @@ struct AppConfig {
 
 class Config {
 public:
-    // Load from %APPDATA%/LiteWallpaper/config.json
+    // Load from %APPDATA%/MiniWallpaper/config.json
     // If file doesn't exist, create with defaults
     bool Load();
     

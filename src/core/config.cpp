@@ -30,7 +30,7 @@ static std::string WideToUtf8(const std::wstring& wstr) {
 std::string Config::GetConfigDir() {
     wchar_t appDataPath[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appDataPath))) {
-        std::wstring dir = std::wstring(appDataPath) + L"\\LiteWallpaper";
+        std::wstring dir = std::wstring(appDataPath) + L"\\MiniWallpaper";
         CreateDirectoryW(dir.c_str(), NULL);
         return WideToUtf8(dir);
     }
@@ -75,8 +75,8 @@ bool Config::Load() {
     // Clean up empty strings and internal cache paths from gallery history
     auto is_invalid = [](const std::string& s) {
         if (s.empty()) return true;
-        if (s.find("\\LiteWallpaper\\optimized\\") != std::string::npos ||
-            s.find("/LiteWallpaper/optimized/") != std::string::npos ||
+        if (s.find("\\MiniWallpaper\\optimized\\") != std::string::npos ||
+            s.find("/MiniWallpaper/optimized/") != std::string::npos ||
             s.find("\\optimized\\") != std::string::npos ||
             s.find("/optimized/") != std::string::npos) {
             return true;
@@ -104,8 +104,8 @@ bool Config::Save() {
     // Clean up empty strings and internal cache paths before saving
     auto is_invalid = [](const std::string& s) {
         if (s.empty()) return true;
-        if (s.find("\\LiteWallpaper\\optimized\\") != std::string::npos ||
-            s.find("/LiteWallpaper/optimized/") != std::string::npos ||
+        if (s.find("\\MiniWallpaper\\optimized\\") != std::string::npos ||
+            s.find("/MiniWallpaper/optimized/") != std::string::npos ||
             s.find("\\optimized\\") != std::string::npos ||
             s.find("/optimized/") != std::string::npos) {
             return true;

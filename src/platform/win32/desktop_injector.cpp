@@ -213,13 +213,13 @@ void DesktopInjector::RegisterExplorerRestart(HWND targetHwnd) {
         wc.cbSize = sizeof(wc);
         wc.lpfnWndProc = MsgReceiverWndProc;
         wc.hInstance = GetModuleHandleW(nullptr);
-        wc.lpszClassName = L"LiteWallpaper_MsgReceiver";
+        wc.lpszClassName = L"MiniWallpaper_MsgReceiver";
         RegisterClassExW(&wc);
 
         // Top-level hidden window placed far off-screen with layered transparent style (0 visual artifacts)
         m_msg_receiver = CreateWindowExW(
             WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED,
-            L"LiteWallpaper_MsgReceiver",
+            L"MiniWallpaper_MsgReceiver",
             L"",
             WS_POPUP,
             -32000, -32000, 0, 0,

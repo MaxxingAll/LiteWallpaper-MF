@@ -53,7 +53,7 @@ void ThumbnailManager::ReleaseTextures() {
 std::string ThumbnailManager::GetCacheDirectory() {
     char path[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_APPDATA, nullptr, 0, path))) {
-        std::string dir = std::string(path) + "\\LiteWallpaper\\thumbnails";
+        std::string dir = std::string(path) + "\\MiniWallpaper\\thumbnails";
         std::error_code ec;
         fs::create_directories(dir, ec);
         return dir;

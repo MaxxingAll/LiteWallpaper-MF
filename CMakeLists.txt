@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(LiteWallpaper VERSION 1.2.0 LANGUAGES CXX RC)
+project(MiniWallpaper VERSION 2.0.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,7 +24,7 @@ set(FFMPEG_INCLUDE_DIR "${FFMPEG_DIR}/include")
 set(FFMPEG_LIB_DIR "${FFMPEG_DIR}/lib")
 
 # === Unified Single Executable ===
-add_executable(LiteWallpaper WIN32
+add_executable(MiniWallpaper WIN32
     src/main.cpp
     src/core/config.cpp
     src/core/playback_clock.cpp
@@ -44,15 +44,15 @@ add_executable(LiteWallpaper WIN32
     src/app.rc
 )
 
-target_include_directories(LiteWallpaper PRIVATE
+target_include_directories(MiniWallpaper PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/third_party
     ${FFMPEG_INCLUDE_DIR}
 )
 
-target_link_directories(LiteWallpaper PRIVATE ${FFMPEG_LIB_DIR})
+target_link_directories(MiniWallpaper PRIVATE ${FFMPEG_LIB_DIR})
 
-target_link_libraries(LiteWallpaper PRIVATE
+target_link_libraries(MiniWallpaper PRIVATE
     nlohmann_json::nlohmann_json
     mimalloc
     imgui::imgui
@@ -64,10 +64,10 @@ target_link_libraries(LiteWallpaper PRIVATE
     winmm wtsapi32 psapi comdlg32 advapi32 imm32 windowsapp
 )
 
-# Automatically generate LiteWallpaper.scr companion screensaver binary
-add_custom_command(TARGET LiteWallpaper POST_BUILD
+# Automatically generate MiniWallpaper.scr companion screensaver binary
+add_custom_command(TARGET MiniWallpaper POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "$<TARGET_FILE:LiteWallpaper>"
-    "$<TARGET_FILE_DIR:LiteWallpaper>/LiteWallpaper.scr"
-    COMMENT "Creating LiteWallpaper.scr screensaver binary"
+    "$<TARGET_FILE:MiniWallpaper>"
+    "$<TARGET_FILE_DIR:MiniWallpaper>/MiniWallpaper.scr"
+    COMMENT "Creating MiniWallpaper.scr screensaver binary"
 )

@@ -35,7 +35,7 @@ jobs:
         run: |
           cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Release -DVCPKG_TARGET_TRIPLET=x64-windows
 
-      - name: Build LiteWallpaper
+      - name: Build MiniWallpaper
         run: |
           cmake --build build --config Release
 
@@ -44,24 +44,24 @@ jobs:
         run: |
           $ver = "${{ github.ref_name }}"
           if (-not $ver -or $ver -eq "main") { $ver = "latest" }
-          New-Item -ItemType Directory -Force -Path "dist/LiteWallpaper-Portable/assets"
-          Copy-Item "build/Release/LiteWallpaper.exe" "dist/LiteWallpaper-Portable/" -Force
-          Copy-Item "build/Release/LiteWallpaper.scr" "dist/LiteWallpaper-Portable/" -Force
-          Copy-Item "build/Release/*.dll" "dist/LiteWallpaper-Portable/" -Force
-          Copy-Item "third_party/ffmpeg/bin/*.dll" "dist/LiteWallpaper-Portable/" -Force
-          Copy-Item "assets/*" "dist/LiteWallpaper-Portable/assets/" -Recurse -Force
-          Copy-Item "README.md" "dist/LiteWallpaper-Portable/" -Force
-          Copy-Item "LICENSE" "dist/LiteWallpaper-Portable/" -Force
-          Compress-Archive -Path "dist/LiteWallpaper-Portable/*" -DestinationPath "LiteWallpaper-Portable-$ver-win64.zip" -Force
+          New-Item -ItemType Directory -Force -Path "dist/MiniWallpaper-Portable/assets"
+          Copy-Item "build/Release/MiniWallpaper.exe" "dist/MiniWallpaper-Portable/" -Force
+          Copy-Item "build/Release/MiniWallpaper.scr" "dist/MiniWallpaper-Portable/" -Force
+          Copy-Item "build/Release/*.dll" "dist/MiniWallpaper-Portable/" -Force
+          Copy-Item "third_party/ffmpeg/bin/*.dll" "dist/MiniWallpaper-Portable/" -Force
+          Copy-Item "assets/*" "dist/MiniWallpaper-Portable/assets/" -Recurse -Force
+          Copy-Item "README.md" "dist/MiniWallpaper-Portable/" -Force
+          Copy-Item "LICENSE" "dist/MiniWallpaper-Portable/" -Force
+          Compress-Archive -Path "dist/MiniWallpaper-Portable/*" -DestinationPath "MiniWallpaper-Portable-$ver-win64.zip" -Force
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: LiteWallpaper-Portable-*.zip
+          files: MiniWallpaper-Portable-*.zip
           generate_release_notes: false
           body: |
-            LiteWallpaper ${{ github.ref_name }} portable for Windows 64-bit.
+            MiniWallpaper ${{ github.ref_name }} portable for Windows 64-bit.
 
-            How to use: extract the zip file, then run LiteWallpaper.exe. No installer needed.
+            How to use: extract the zip file, then run MiniWallpaper.exe. No installer needed.
             Requires Windows 7 SP1 or newer.

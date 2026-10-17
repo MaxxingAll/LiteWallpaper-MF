@@ -10,7 +10,7 @@
 namespace litewp {
 
 // Minimal diagnostic logger. Appends timestamped lines to
-// %APPDATA%\LiteWallpaper\engine.log and mirrors them to the debugger.
+// %APPDATA%\MiniWallpaper\engine.log and mirrors them to the debugger.
 class Logger {
 public:
     static Logger& Instance() {
@@ -47,7 +47,7 @@ private:
         wchar_t appDataPath[MAX_PATH];
         std::wstring path;
         if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appDataPath))) {
-            path = std::wstring(appDataPath) + L"\\LiteWallpaper";
+            path = std::wstring(appDataPath) + L"\\MiniWallpaper";
             CreateDirectoryW(path.c_str(), nullptr);
             path += L"\\engine.log";
         } else {

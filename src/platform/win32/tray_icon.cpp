@@ -23,7 +23,7 @@ bool TrayIcon::Create(HWND hwnd, TrayCallback callback) {
     if (!m_nid.hIcon) {
         m_nid.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512)); // IDI_APPLICATION
     }
-    wcscpy_s(m_nid.szTip, L"LiteWallpaper");
+    wcscpy_s(m_nid.szTip, L"MiniWallpaper");
     
     Shell_NotifyIconW(NIM_ADD, &m_nid);
     

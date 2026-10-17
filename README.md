@@ -1,12 +1,12 @@
 <div align="center">
 
-  <img src="assets/logo.jpg" alt="LiteWallpaper Logo" width="140" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0, 200, 255, 0.2);" />
+  <img src="assets/logo.jpg" alt="MiniWallpaper Logo" width="140" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0, 200, 255, 0.2);" />
 
-  # LiteWallpaper
+  # MiniWallpaper
 
   **Ultra-Lightweight, High-Performance Animated Video Wallpaper Engine for Windows**
 
-  [![Version](https://img.shields.io/badge/Version-v1.2.0-blue.svg)](https://github.com/f4rdani/LiteWallpaper/releases/tag/v1.2.0)
+  [![Version](https://img.shields.io/badge/Version-v2.0.0-blue.svg)](https://github.com/f4rdani/LiteWallpaper/releases/tag/v2.0.0)
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
   [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=c%2B%2B)](https://en.wikipedia.org/wiki/C%2B%2B20)
   [![DirectX](https://img.shields.io/badge/DirectX-11%20HW%20Accelerated-green.svg)](https://learn.microsoft.com/windows/win32/direct3d11/direct3d-11-graphics)
@@ -24,9 +24,9 @@
 
 ## ⚡ Performance Benchmarks (v1.1.0)
 
-LiteWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** from the ground up, completely eliminating heavy web runtimes (Chromium/CEF/Electron/WPF) to achieve an unprecedented low-resource footprint:
+MiniWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** from the ground up, completely eliminating heavy web runtimes (Chromium/CEF/Electron/WPF) to achieve an unprecedented low-resource footprint:
 
-| Operational Metric | 🚀 **LiteWallpaper (v1.1.0)** | State / Verification Details |
+| Operational Metric | 🚀 **MiniWallpaper (v1.1.0)** | State / Verification Details |
 | :--- | :---: | :--- |
 | **RAM (Working Set - Active)** | **`~0.7 MB - 4.5 MB`** | 1080p 60 FPS hardware playback |
 | **RAM (Deep Suspend / Idle)** | **`< 2.0 MB`** | Automatic working set trim & zero-purge mimalloc |
@@ -39,7 +39,7 @@ LiteWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** fro
 ### 📸 Real-World Telemetry
 
 #### 1. Windows Task Manager Footprint
-> *LiteWallpaper running with active 1080p hardware-accelerated video playback at only **4.4 MB RAM** and **1.1% CPU**:*
+> *MiniWallpaper running with active 1080p hardware-accelerated video playback at only **4.4 MB RAM** and **1.1% CPU**:*
 
 <div align="center">
   <img src="assets/screenshots/task_manager_benchmark.png" alt="Windows Task Manager Benchmark" width="680" />
@@ -65,7 +65,7 @@ LiteWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** fro
   - **Workstation Lock Detection**: Instantly sleeps when Windows is locked (`Win + L`) to preserve power.
 - 🖼️ **Dual Independent Static Wallpapers**: Set separate static snapshot sources and custom extracted frames for Windows Desktop and Lock Screen independently.
 - 🎯 **Frame-Accurate Timestamp & Frame Picker**: Seek with frame-precision across 120+ FPS videos with real-time dynamic slider preview modal.
-- 🌙 **Native Windows Screensaver (`LiteWallpaper.scr`)**: Seamless companion screensaver binary that plays your animated wallpapers when idle.
+- 🌙 **Native Windows Screensaver (`MiniWallpaper.scr`)**: Seamless companion screensaver binary that plays your animated wallpapers when idle.
 - 🎨 **Modern Control Panel & Translucent UI**: 4-tab responsive layout, YouTube-style gallery cards with resolution tooltips, and acrylic-style translucent glass window backdrop.
 - ⚡ **Integrated 1080p Video Optimizer**: Built-in GPU pre-scaler that converts heavy 4K/high-bitrate videos into lightweight 1080p NV12 hardware streams, saving up to ~75% GPU load.
 - 🖥️ **Multi-Monitor & Desktop Selection**: Choose whether wallpapers play across all monitors or selectively target specific screens.
@@ -76,11 +76,11 @@ LiteWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** fro
 ## 🚀 Getting Started
 
 ### Portable Version (No Installation Required)
-1. Download the latest `LiteWallpaper-Portable.zip` from [Releases](https://github.com/f4rdani/LiteWallpaper/releases).
+1. Download the latest `MiniWallpaper-Portable.zip` from [Releases](https://github.com/f4rdani/LiteWallpaper/releases).
 2. Extract the archive to any folder of your choice.
-3. Run `LiteWallpaper.exe`.
+3. Run `MiniWallpaper.exe`.
 4. Drag & drop any video into the **Wallpaper Gallery**, click **Play**, and enjoy!
-5. Close the Control Panel to minimize LiteWallpaper to the system tray (`~4-12 MB RAM`).
+5. Close the Control Panel to minimize MiniWallpaper to the system tray (`~4-12 MB RAM`).
 
 ---
 
@@ -108,7 +108,7 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.
 cmake --build build --config Release
 ```
 
-The compiled portable binary will be generated at `build/Release/LiteWallpaper.exe`.
+The compiled portable binary will be generated at `build/Release/MiniWallpaper.exe`.
 
 ---
 

@@ -1,7 +1,7 @@
 # Third-Party Dependencies
 
 ## FFmpeg Development Libraries
-LiteWallpaper uses FFmpeg (avcodec, avformat, avutil, swscale, swresample) for hardware-accelerated video decoding (D3D11VA).
+MiniWallpaper uses FFmpeg (avcodec, avformat, avutil, swscale, swresample) for hardware-accelerated video decoding (D3D11VA).
 
 ### Download Instructions:
 1. Download Windows 64-bit shared developer builds (e.g. from https://github.com/BtbN/FFmpeg-Builds/releases or https://ffmpeg.org).

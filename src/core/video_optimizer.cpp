@@ -70,7 +70,7 @@ VideoProbeResult VideoOptimizer::Probe(const std::string& input_path) {
 static std::string GetCacheDirectory() {
     char path[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_APPDATA, nullptr, 0, path))) {
-        std::string dir = std::string(path) + "\\LiteWallpaper\\optimized";
+        std::string dir = std::string(path) + "\\MiniWallpaper\\optimized";
         std::error_code ec;
         fs::create_directories(dir, ec);
         return dir;

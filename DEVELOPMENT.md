@@ -1,6 +1,6 @@
-# 🛠️ LiteWallpaper — Developer & Architecture Guide
+# 🛠️ MiniWallpaper — Developer & Architecture Guide
 
-Welcome to the **LiteWallpaper** codebase! This guide is written for developers and contributors who want to understand the internal architecture, set up the development environment, build from source, and extend the engine.
+Welcome to the **MiniWallpaper** codebase! This guide is written for developers and contributors who want to understand the internal architecture, set up the development environment, build from source, and extend the engine.
 
 ---
 
@@ -19,7 +19,7 @@ Welcome to the **LiteWallpaper** codebase! This guide is written for developers 
 
 ## 🎯 Core Philosophy & Constraints
 
-LiteWallpaper is engineered with extreme performance constraints that differentiate it from existing wallpaper engines:
+MiniWallpaper is engineered with extreme performance constraints that differentiate it from existing wallpaper engines:
 
 | Constraint | Target / Rule | Rationale |
 |:---|:---|:---|
@@ -33,11 +33,11 @@ LiteWallpaper is engineered with extreme performance constraints that differenti
 
 ## 🏗️ High-Level Architecture
 
-LiteWallpaper is built as a unified native binary (`LiteWallpaper.exe`) combining an ultra-low-overhead resident render loop and an on-demand Dear ImGui control panel:
+MiniWallpaper is built as a unified native binary (`MiniWallpaper.exe`) combining an ultra-low-overhead resident render loop and an on-demand Dear ImGui control panel:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    LiteWallpaper.exe                        │
+│                    MiniWallpaper.exe                        │
 ├─────────────────────────────────────────────────────────────┤
 │  1. Background Desktop Renderer Loop                        │
 │     - Memory: ~4.4 MB - 12 MB RAM | CPU: < 1.0%             │
@@ -155,7 +155,7 @@ cmake --build build --config Release
 ```
 
 Output executable will be located at:
-- `build/Release/LiteWallpaper.exe`
+- `build/Release/MiniWallpaper.exe`
 
 ---
 
@@ -164,11 +164,11 @@ Output executable will be located at:
 To bundle the executable, runtime DLLs, assets, and shaders for release:
 
 ```powershell
-$dist = "dist/LiteWallpaper-Portable"
+$dist = "dist/MiniWallpaper-Portable"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 New-Item -ItemType Directory -Force -Path "$dist/assets" | Out-Null
 
-Copy-Item "build/Release/LiteWallpaper.exe" -Destination $dist
+Copy-Item "build/Release/MiniWallpaper.exe" -Destination $dist
 Copy-Item "third_party/ffmpeg/bin/*.dll" -Destination $dist
 Copy-Item "build/vcpkg_installed/x64-windows/bin/*.dll" -Destination $dist
 Copy-Item "assets/*" -Destination "$dist/assets"
@@ -176,7 +176,7 @@ Copy-Item "LICENSE" -Destination $dist
 Copy-Item "README.md" -Destination $dist
 
 # Compress to Zip
-Compress-Archive -Path "$dist/*" -DestinationPath "dist/LiteWallpaper-Portable-win64.zip" -Force
+Compress-Archive -Path "$dist/*" -DestinationPath "dist/MiniWallpaper-Portable-win64.zip" -Force
 ```
 
 ---
@@ -184,7 +184,7 @@ Compress-Archive -Path "$dist/*" -DestinationPath "dist/LiteWallpaper-Portable-w
 ## 🔌 IPC & Engine Command Protocol
 
 The engine provides a local Windows Named Pipe interface for single-instance activation and IPC control:
-- **Pipe Address**: `\\.\pipe\LiteWallpaper`
+- **Pipe Address**: `\\.\pipe\MiniWallpaper`
 - **Format**: JSON-RPC over message pipe (`PIPE_TYPE_MESSAGE`)
 
 ### Supported Commands
@@ -204,7 +204,7 @@ The engine provides a local Windows Named Pipe interface for single-instance act
 
 ## ⚡ Hardware Acceleration & Dual-GPU Pipeline
 
-LiteWallpaper employs a specialized DirectX 11 rendering pipeline designed for minimal power and memory consumption:
+MiniWallpaper employs a specialized DirectX 11 rendering pipeline designed for minimal power and memory consumption:
 
 1. **Integrated GPU (iGPU) Preference**:
    * When multiple GPUs are detected (e.g. Intel UHD Graphics + NVIDIA RTX), the default hardware device routes to the iGPU (`gpu_index = 1`).
@@ -219,7 +219,7 @@ LiteWallpaper employs a specialized DirectX 11 rendering pipeline designed for m
 
 ## ⚠️ Critical Engineering Rules
 
-When contributing code to LiteWallpaper, **always adhere to these principles**:
+When contributing code to MiniWallpaper, **always adhere to these principles**:
 
 1. **Preserve Ultra-Low RAM Footprint**: Never introduce heavy libraries, web runtimes, or unmanaged thread pools into hot render loops.
 2. **Thread Safety**: All state shared between the daemon render loop and the UI thread must use `std::atomic` or `g_decoder_mutex` protection.

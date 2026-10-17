@@ -69,7 +69,7 @@ LockScreenManager::~LockScreenManager() {
 std::wstring LockScreenManager::GetTempImagePathBmp() const {
     wchar_t appDataPath[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appDataPath))) {
-        std::wstring dir = std::wstring(appDataPath) + L"\\LiteWallpaper";
+        std::wstring dir = std::wstring(appDataPath) + L"\\MiniWallpaper";
         CreateDirectoryW(dir.c_str(), NULL);
         return dir + L"\\lockscreen_capture.bmp";
     }
@@ -79,7 +79,7 @@ std::wstring LockScreenManager::GetTempImagePathBmp() const {
 std::wstring LockScreenManager::GetTempImagePathJpg(int slot) const {
     wchar_t appDataPath[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appDataPath))) {
-        std::wstring dir = std::wstring(appDataPath) + L"\\LiteWallpaper";
+        std::wstring dir = std::wstring(appDataPath) + L"\\MiniWallpaper";
         CreateDirectoryW(dir.c_str(), NULL);
         if (slot >= 0) {
             return dir + L"\\lockscreen_capture_" + std::to_wstring(slot) + L".jpg";
@@ -92,7 +92,7 @@ std::wstring LockScreenManager::GetTempImagePathJpg(int slot) const {
 std::wstring LockScreenManager::GetDesktopPlaceholderImagePathJpg(int slot) const {
     wchar_t appDataPath[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appDataPath))) {
-        std::wstring dir = std::wstring(appDataPath) + L"\\LiteWallpaper";
+        std::wstring dir = std::wstring(appDataPath) + L"\\MiniWallpaper";
         CreateDirectoryW(dir.c_str(), NULL);
         if (slot >= 0) {
             return dir + L"\\active_wallpaper_placeholder_" + std::to_wstring(slot) + L".jpg";

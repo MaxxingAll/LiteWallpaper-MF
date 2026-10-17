@@ -1,4 +1,4 @@
-// LiteWallpaper — Ultra-lightweight animated video wallpaper engine
+// MiniWallpaper — Ultra-lightweight animated video wallpaper engine
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -8,6 +8,7 @@
 #include <commdlg.h>
 #include <psapi.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <string>
 #include <thread>
 #include <mutex>
@@ -326,14 +327,14 @@ static int RunScreensaverMode(HINSTANCE hInstance) {
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.lpfnWndProc = ScreensaverWndProc;
     wc.hInstance = hInstance;
-    wc.lpszClassName = L"LiteWallpaper_Screensaver";
+    wc.lpszClassName = L"MiniWallpaper_Screensaver";
     wc.hCursor = nullptr;
     RegisterClassExW(&wc);
 
     HWND hwnd = CreateWindowExW(
         WS_EX_TOPMOST,
         wc.lpszClassName,
-        L"LiteWallpaper Screensaver",
+        L"MiniWallpaper Screensaver",
         WS_POPUP | WS_VISIBLE,
         vx, vy, vw, vh,
         nullptr, nullptr, hInstance, nullptr
@@ -414,6 +415,35 @@ static int RunScreensaverMode(HINSTANCE hInstance) {
     UnregisterClassW(wc.lpszClassName, hInstance);
     timeEndPeriod(1);
     return 0;
+}
+
+// One-time rebranding migration: move legacy %APPDATA%\LiteWallpaper data
+// (config, gallery, logs, thumbnails, optimized caches) to %APPDATA%\MiniWallpaper
+// so existing users keep their setup after the LiteWallpaper -> MiniWallpaper rename.
+static void MigrateLegacyAppData() {
+    wchar_t appDataPath[MAX_PATH] = {};
+    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appDataPath))) return;
+
+    fs::path legacyDir = fs::path(appDataPath) / L"LiteWallpaper";
+    fs::path newDir = fs::path(appDataPath) / L"MiniWallpaper";
+
+    std::error_code ec;
+    if (fs::exists(newDir, ec)) return;     // Already migrated or fresh install
+    if (!fs::exists(legacyDir, ec)) return; // Nothing to migrate
+
+    fs::rename(legacyDir, newDir, ec);
+    if (ec) {
+        // Fallback: cross-volume move or locked file -> recursive copy, then remove source
+        ec.clear();
+        fs::copy(legacyDir, newDir, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            Logger::Info("Legacy data migration failed: ", ec.message());
+            return;
+        }
+        std::error_code removeEc;
+        fs::remove_all(legacyDir, removeEc);
+    }
+    Logger::Info("Migrated legacy LiteWallpaper appdata to MiniWallpaper");
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpCmdLine, int /*nCmdShow*/) {
@@ -504,7 +534,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
     bool is_silent_boot = (lpCmdLine && (wcsstr(lpCmdLine, L"--startup") != nullptr || wcsstr(lpCmdLine, L"-startup") != nullptr));
 
     // Single-Instance Check
-    HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"LiteWallpaper_SingleInstance_Mutex");
+    HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"MiniWallpaper_SingleInstance_Mutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         if (!is_silent_boot) {
             IpcClient client;
@@ -515,6 +545,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
     }
 
     timeBeginPeriod(1);
+
+    // One-time rebranding migration from legacy "LiteWallpaper" naming
+    // (appdata folder + autostart registry entries + legacy startup shortcut)
+    MigrateLegacyAppData();
+    WindowsAutostart::MigrateLegacy();
 
     // 1. Load Configuration
     g_config.Load();
@@ -532,7 +567,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
     wc.hInstance = hInstance;
     wc.hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(1));
     wc.hIconSm = LoadIconW(hInstance, MAKEINTRESOURCEW(1));
-    wc.lpszClassName = L"LiteWallpaper_Daemon";
+    wc.lpszClassName = L"MiniWallpaper_Daemon";
     RegisterClassExW(&wc);
 
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -542,8 +577,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
 
     g_main_hwnd = CreateWindowExW(
         WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
-        L"LiteWallpaper_Daemon",
-        L"LiteWallpaper",
+        L"MiniWallpaper_Daemon",
+        L"MiniWallpaper",
         WS_POPUP,
         vx, vy, vw, vh,
         nullptr, nullptr, hInstance, nullptr
@@ -670,8 +705,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
             int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
             g_main_hwnd = CreateWindowExW(
                 WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
-                L"LiteWallpaper_Daemon",
-                L"LiteWallpaper",
+                L"MiniWallpaper_Daemon",
+                L"MiniWallpaper",
                 WS_POPUP,
                 vx, vy, vw, vh,
                 nullptr, nullptr, GetModuleHandleW(nullptr), nullptr

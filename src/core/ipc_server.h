@@ -6,8 +6,8 @@
 
 namespace litewp {
 
-// Pipe name: \\.\pipe\LiteWallpaper
-constexpr const wchar_t* PIPE_NAME = L"\\\\.\\pipe\\LiteWallpaper";
+// Pipe name: \\.\pipe\MiniWallpaper
+constexpr const wchar_t* PIPE_NAME = L"\\\\.\\pipe\\MiniWallpaper";
 
 // Callback receives incoming JSON request string and returns JSON response string
 using IpcCallback = std::function<std::string(const std::string& request_json)>;

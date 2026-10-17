@@ -72,8 +72,8 @@ static bool IsRealAppWindow(HWND hwnd) {
             wcscmp(cls, L"DirectUIHWND") == 0 ||
             wcscmp(cls, L"tooltips_class32") == 0 ||
             wcscmp(cls, L"SysShadow") == 0 ||
-            wcscmp(cls, L"LiteWallpaper_SettingsClass") == 0 ||
-            wcscmp(cls, L"LiteWallpaper_Daemon") == 0) {
+            wcscmp(cls, L"MiniWallpaper_SettingsClass") == 0 ||
+            wcscmp(cls, L"MiniWallpaper_Daemon") == 0) {
             return false;
         }
     }

@@ -50,6 +50,7 @@ public:
     static bool IsEnabled();
     static bool SetEnabled(bool enable, int priority = 1);
     static void AutoRepairIfMoved(int priority = 1);
+    static void MigrateLegacy();
 };
 
 } // namespace litewp
