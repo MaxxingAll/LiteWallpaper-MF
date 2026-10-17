@@ -242,7 +242,9 @@ static bool CreateDeviceD3D(HWND hWnd) {
         &g_pd3dDeviceContext
     );
 
-    if (res != S_OK) return false;
+    if (res != S_OK) {
+        return false;
+    }
 
     CreateRenderTarget();
     return true;
@@ -464,7 +466,7 @@ static void DrawFloatingShadow(ImVec2 p0, ImVec2 p1, float rounding) {
 
 // =========================================================================
 // STARTORCH UI KIT (MiniWallpaper edition) — atomic widgets
-// Palet: biru → putih (+ aksen gold & merah). Tanpa emoji/glyph dekoratif.
+// Palet: biru → putih (+ aksen gold, pink starlume, & merah). Tanpa emoji/glyph dekoratif.
 // =========================================================================
 #define ST_BG_BASE     IM_COL32(9, 12, 21, 255)
 #define ST_PANEL       IM_COL32(17, 23, 38, 245)
@@ -480,6 +482,9 @@ static void DrawFloatingShadow(ImVec2 p0, ImVec2 p1, float rounding) {
 #define ST_RED         IM_COL32(255, 77, 109, 255)
 #define ST_CYAN_LINE   IM_COL32(56, 232, 255, 46)
 #define ST_CYAN_EDGE   IM_COL32(56, 232, 255, 107)
+#define ST_PINK        IM_COL32(255, 148, 178, 255) // aksen starlume (kit)
+#define ST_PINK_SOFT   IM_COL32(255, 196, 214, 255)
+#define ST_GREEN       IM_COL32(46, 229, 157, 255)
 
 static ImU32 StAlpha(ImU32 col, float a) {
     ImVec4 f = ImGui::ColorConvertU32ToFloat4(col);
@@ -519,6 +524,18 @@ static void StGradientBar(ImDrawList* dl, ImVec2 a, ImVec2 b, float rounding, Im
     dl->AddRectFilled(a, ImVec2(a.x + r * 2.0f, b.y), leftCol, r, ImDrawFlags_RoundCornersLeft);
     dl->AddRectFilled(ImVec2(b.x - r * 2.0f, a.y), b, rightCol, r, ImDrawFlags_RoundCornersRight);
     dl->AddRectFilledMultiColor(ImVec2(a.x + r, a.y), ImVec2(b.x - r, b.y), leftCol, rightCol, rightCol, leftCol);
+}
+
+// Bar gradien starlume 3-stop (cyan → pink → gold, sesuai kit) dgn ujung membulat.
+static void StGradientStarlume(ImDrawList* dl, ImVec2 a, ImVec2 b, float rounding) {
+    float w = b.x - a.x;
+    if (w <= 1.5f) return;
+    float midX = a.x + w * 0.52f;
+    dl->AddRectFilledMultiColor(a, ImVec2(midX, b.y), ST_CYAN, ST_PINK, ST_PINK, ST_CYAN);
+    dl->AddRectFilledMultiColor(ImVec2(midX, a.y), b, ST_PINK, ST_GOLD, ST_GOLD, ST_PINK);
+    float cap = (std::min)(rounding * 2.0f, w * 0.5f);
+    dl->AddRectFilled(a, ImVec2(a.x + cap, b.y), ST_CYAN, rounding, ImDrawFlags_RoundCornersLeft);
+    dl->AddRectFilled(ImVec2(b.x - cap, a.y), b, ST_GOLD, rounding, ImDrawFlags_RoundCornersRight);
 }
 
 // Glow lembut utk rounded-rect (digambar di belakang shape).
@@ -736,70 +753,50 @@ static bool StarlumeSliderFloat(const char* label, float* v, float vmin, float v
     return StarlumeSliderEx(label, v, vmin, vmax, decimals, suffix, width);
 }
 
-// ---- Resource usage bars (Variant 1: Starlume & Segmented) ----
-static void StBarHeader(const char* label, const char* valText, ImU32 valCol) {
+// ---- Resource usage bars (Startorch Variant 1: STARLUME HARMONY) ----
+static void StBarHeader(const char* label, const char* valText, ImU32 valCol, ImU32 labelCol) {
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float w = ImGui::GetContentRegionAvail().x;
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddText(pos, ST_TEXT_DIM, label);
+    dl->AddText(pos, labelCol, label);
     ImVec2 vtsz = ImGui::CalcTextSize(valText);
     dl->AddText(ImVec2(pos.x + w - vtsz.x, pos.y), valCol, valText);
     ImGui::Dummy(ImVec2(w, ImGui::GetFontSize() + 4.0f));
 }
 
-static void StarlumeBarInternal(const char* valText, float pct01, ImU32 topCol, bool withHeader, const char* label, ImU32 valCol) {
+static void StarlumeBarInternal(const char* valText, float pct01, bool withHeader, const char* label, ImU32 valCol, ImU32 labelCol, float marker01) {
     pct01 = (std::min)(1.0f, (std::max)(0.0f, pct01));
     float w = ImGui::GetContentRegionAvail().x;
-    if (withHeader) StBarHeader(label, valText, valCol);
+    if (withHeader) StBarHeader(label, valText, valCol, labelCol);
     ImVec2 pos = ImGui::GetCursorScreenPos();
     ImVec2 a = pos, b = ImVec2(pos.x + w, pos.y + 10.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(a, b, ST_BG_BASE, 5.0f);
     float fx = a.x + (b.x - a.x) * pct01;
-    if (fx > a.x + 1.5f) {
-        StGradientBar(dl, a, ImVec2(fx, b.y), 5.0f, ST_CYAN, topCol);
-        dl->PushClipRect(a, ImVec2(fx, b.y), true);
-        float bw = (b.x - a.x) * 0.30f;
-        float phase = fmodf((float)ImGui::GetTime() * 0.55f, 1.0f);
-        float bx = a.x - bw + ((b.x - a.x) + 2.0f * bw) * phase;
-        ImU32 peak = StAlpha(ST_WHITE, 0.30f);
-        ImU32 none = StAlpha(ST_WHITE, 0.0f);
-        dl->AddRectFilledMultiColor(ImVec2(bx, a.y), ImVec2(bx + bw * 0.5f, b.y), none, peak, peak, none);
-        dl->AddRectFilledMultiColor(ImVec2(bx + bw * 0.5f, a.y), ImVec2(bx + bw, b.y), peak, none, none, peak);
-        dl->PopClipRect();
-    }
-    dl->AddRect(a, b, ST_CYAN_LINE, 5.0f, 0, 1.0f);
-    ImGui::Dummy(ImVec2(w, 10.0f));
-}
-
-static void StarlumeBar(const char* label, float pct01, const char* valText, ImU32 valCol = ST_GOLD, ImU32 topCol = ST_WHITE) {
-    StarlumeBarInternal(valText, pct01, topCol, true, label, valCol);
-}
-
-static void SegmentedBar(const char* label, float pct01, const char* valText, ImU32 valCol = ST_GOLD) {
-    const int cells = 10;
-    pct01 = (std::min)(1.0f, (std::max)(0.0f, pct01));
-    float w = ImGui::GetContentRegionAvail().x;
-    StBarHeader(label, valText, valCol);
-    ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    float gap = 4.0f;
-    float cw = (w - gap * (cells - 1)) / (float)cells;
-    int filled = (int)std::lround(pct01 * (float)cells);
-    for (int i = 0; i < cells; ++i) {
-        ImVec2 ca = ImVec2(pos.x + i * (cw + gap), pos.y);
-        ImVec2 cb = ImVec2(ca.x + cw, ca.y + 10.0f);
-        if (i < filled) {
-            float t = (i + 0.5f) / (float)cells;
-            ImU32 col = (t < 0.5f) ? ST_CYAN : (t < 0.8f ? ST_GOLD : ST_RED);
-            dl->AddRectFilled(ImVec2(ca.x - 1.2f, ca.y - 1.2f), ImVec2(cb.x + 1.2f, cb.y + 1.2f), StAlpha(col, 0.22f), 4.0f);
-            dl->AddRectFilledMultiColor(ca, cb, StMix(col, ST_WHITE, 0.30f), StMix(col, ST_WHITE, 0.30f), col, col);
-        } else {
-            dl->AddRectFilled(ca, cb, ST_PANEL_ELEV, 2.5f);
-            dl->AddRect(ca, cb, ST_CYAN_LINE, 2.5f, 0, 1.0f);
+    if (fx > a.x + 2.0f) {
+        StGradientStarlume(dl, a, ImVec2(fx, b.y), 5.0f);
+        if (fx > a.x + 8.0f) {
+            dl->PushClipRect(a, ImVec2(fx - 1.0f, b.y), true);
+            float bw = (b.x - a.x) * 0.30f;
+            float phase = fmodf((float)ImGui::GetTime() * 0.55f, 1.0f);
+            float bx = a.x - bw + ((b.x - a.x) + 2.0f * bw) * phase;
+            ImU32 peak = StAlpha(ST_WHITE, 0.30f);
+            ImU32 none = StAlpha(ST_WHITE, 0.0f);
+            dl->AddRectFilledMultiColor(ImVec2(bx, a.y), ImVec2(bx + bw * 0.5f, b.y), none, peak, peak, none);
+            dl->AddRectFilledMultiColor(ImVec2(bx + bw * 0.5f, a.y), ImVec2(bx + bw, b.y), peak, none, none, peak);
+            dl->PopClipRect();
         }
     }
+    dl->AddRect(a, b, StAlpha(ST_CYAN, 0.25f), 5.0f, 0, 1.0f);
+    if (marker01 >= 0.0f) {
+        float mx = a.x + (b.x - a.x) * (std::min)(1.0f, (std::max)(0.0f, marker01));
+        dl->AddLine(ImVec2(mx, a.y - 2.0f), ImVec2(mx, b.y + 2.0f), StAlpha(ST_GOLD, 0.85f), 1.6f);
+    }
     ImGui::Dummy(ImVec2(w, 10.0f));
+}
+
+static void StarlumeBar(const char* label, float pct01, const char* valText, ImU32 valCol = ST_GOLD, ImU32 labelCol = ST_PINK_SOFT, float marker01 = -1.0f) {
+    StarlumeBarInternal(valText, pct01, true, label, valCol, labelCol, marker01);
 }
 
 // ---- Progress bar Starlume (utk progress optimisasi) ----
@@ -889,6 +886,198 @@ static void EndModuleCard() {
     ImGui::EndChild();
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(2);
+}
+
+// ---- Glass card (Startorch Variant 1: Exo-Genesis Standard Glass + L-brackets) ----
+static void StDrawLBrackets(ImDrawList* dl, ImVec2 a, ImVec2 b, float t) {
+    float L = 12.0f + 10.0f * t; // melebar saat hover (12 → 22 px)
+    ImU32 cyan = StMix(ST_CYAN, ST_WHITE, 0.35f * t);
+    ImU32 pink = StMix(ST_PINK, ST_WHITE, 0.35f * t);
+    if (t > 0.05f) {
+        ImU32 gcy = StAlpha(ST_CYAN, 0.16f * t);
+        ImU32 gpk = StAlpha(ST_PINK, 0.16f * t);
+        dl->AddLine(ImVec2(a.x + 2.0f, a.y + 2.0f + L), ImVec2(a.x + 2.0f, a.y + 2.0f), gcy, 5.0f);
+        dl->AddLine(ImVec2(a.x + 2.0f, a.y + 2.0f), ImVec2(a.x + 2.0f + L, a.y + 2.0f), gcy, 5.0f);
+        dl->AddLine(ImVec2(b.x - 2.0f, b.y - 2.0f - L), ImVec2(b.x - 2.0f, b.y - 2.0f), gpk, 5.0f);
+        dl->AddLine(ImVec2(b.x - 2.0f, b.y - 2.0f), ImVec2(b.x - 2.0f - L, b.y - 2.0f), gpk, 5.0f);
+    }
+    dl->AddLine(ImVec2(a.x + 2.0f, a.y + 2.0f + L), ImVec2(a.x + 2.0f, a.y + 2.0f), cyan, 2.0f);
+    dl->AddLine(ImVec2(a.x + 2.0f, a.y + 2.0f), ImVec2(a.x + 2.0f + L, a.y + 2.0f), cyan, 2.0f);
+    dl->AddLine(ImVec2(b.x - 2.0f, b.y - 2.0f - L), ImVec2(b.x - 2.0f, b.y - 2.0f), pink, 2.0f);
+    dl->AddLine(ImVec2(b.x - 2.0f, b.y - 2.0f), ImVec2(b.x - 2.0f - L, b.y - 2.0f), pink, 2.0f);
+}
+
+struct StGlassCardPending {
+    ImGuiID uid;
+    bool brackets;
+};
+static StGlassCardPending g_stGlassPending[8];
+static int g_stGlassPendingN = 0;
+
+// size.y <= 0 → tinggi kartu mengikuti konten (auto-fit child). Latar + bracket
+// digambar di EndGlassCard setelah ukuran child final, jadi auto-height akurat.
+static void BeginGlassCard(const char* id, ImVec2 size, float padX = 18.0f, float padY = 16.0f, ImGuiWindowFlags flags = 0, bool brackets = true) {
+    ImVec2 sz = size;
+    ImVec2 avail = ImGui::GetContentRegionAvail();
+    if (sz.x <= 0.0f) sz.x = avail.x;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padX, padY));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
+    ImGui::BeginChild(id, ImVec2(sz.x, (sz.y > 0.0f) ? sz.y : 0.0f), ImGuiChildFlags_None, flags);
+
+    if (g_stGlassPendingN < IM_ARRAYSIZE(g_stGlassPending)) {
+        g_stGlassPending[g_stGlassPendingN].uid = ImGui::GetID(id);
+        g_stGlassPending[g_stGlassPendingN].brackets = brackets;
+        g_stGlassPendingN++;
+    }
+}
+
+// Return: tinggi kartu aktual (utk menyusun kartu berikutnya).
+static float EndGlassCard() {
+    ImGui::EndChild();
+    ImVec2 a = ImGui::GetItemRectMin();
+    ImVec2 b = ImGui::GetItemRectMax();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(2);
+
+    ImGuiID uid = 0;
+    bool brackets = true;
+    if (g_stGlassPendingN > 0) {
+        g_stGlassPendingN--;
+        uid = g_stGlassPending[g_stGlassPendingN].uid;
+        brackets = g_stGlassPending[g_stGlassPendingN].brackets;
+    }
+
+    bool hovered = ImGui::IsMouseHoveringRect(a, b);
+    float ht = AnimTowards(uid ^ 0x61A5u, hovered ? 1.0f : 0.0f, 8.0f);
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(a, b, hovered ? ST_GLASS_HOVER : ST_GLASS, 14.0f);
+    dl->AddRect(a, b, StMix(ST_CYAN_LINE, ST_CYAN_EDGE, ht), 14.0f, 0, 1.0f);
+    if (brackets) StDrawLBrackets(dl, a, b, ht);
+    return b.y - a.y;
+}
+
+// Header kartu: pill badge cyan (kit) + kode kanan yg redup.
+static void GlassCardHeader(const char* pillText, const char* rightText) {
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    float w = ImGui::GetContentRegionAvail().x;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 ts = ImGui::CalcTextSize(pillText);
+    float ph = ts.y + 6.0f;
+    float pw = ts.x + 18.0f;
+    ImVec2 pa = pos;
+    ImVec2 pb = ImVec2(pos.x + pw, pos.y + ph);
+
+    // Pill / Segmented Switcher (Variant 2): latar pill aktif pink gradient
+    // dengan glow, seperti .st-navbar-pill pada kit Startorch.
+    dl->AddRectFilled(ImVec2(pa.x - 2.0f, pa.y - 2.0f), ImVec2(pb.x + 2.0f, pb.y + 2.0f),
+                      StAlpha(ST_PINK, 0.10f), ph * 0.5f + 2.0f);
+    dl->AddRectFilled(pa, pb, StAlpha(ST_PINK, 0.18f), ph * 0.5f);
+    dl->AddRect(pa, pb, StAlpha(ST_PINK, 0.45f), ph * 0.5f, 0, 1.0f);
+    dl->AddText(ImVec2(pa.x + 9.0f, pa.y + 3.0f), ST_WHITE, pillText);
+
+    if (rightText && rightText[0]) {
+        ImVec2 rs = ImGui::CalcTextSize(rightText);
+        dl->AddText(ImVec2(pos.x + w - rs.x, pos.y + 3.0f), ST_TEXT_DIM, rightText);
+    }
+    ImGui::Dummy(ImVec2(w, ph + 10.0f));
+}
+
+static void TextDim(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(ST_TEXT_MUTED));
+    ImGui::TextV(fmt, args);
+    ImGui::PopStyleColor();
+    va_end(args);
+}
+
+static std::string StEllipsize(const std::string& s, size_t maxChars) {
+    if (s.size() <= maxChars || maxChars < 4) return s;
+    return s.substr(0, maxChars - 3) + "...";
+}
+
+// ---- Telemetry metric tile (Startorch Variant 3: Telemetry Metric) ----
+static void TelemetryTile(const char* id, const char* label, float pct01, const char* valueText, const char* unitText,
+                          const char* statusText, ImU32 statusCol, const float* hist5, const char* subText, ImVec2 size) {
+    pct01 = (std::min)(1.0f, (std::max)(0.0f, pct01));
+    BeginGlassCard(id, size, 16.0f, 14.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse, false);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float w = ImGui::GetContentRegionAvail().x;
+
+    // Baris 1: label + status pill (kanan)
+    {
+        ImVec2 pos = ImGui::GetCursorScreenPos();
+        dl->AddText(pos, ST_TEXT_DIM, label);
+        ImVec2 sts = ImGui::CalcTextSize(statusText);
+        float ph = sts.y + 4.0f;
+        ImVec2 pa = ImVec2(pos.x + w - (sts.x + 16.0f), pos.y - 1.0f);
+        ImVec2 pb = ImVec2(pa.x + sts.x + 16.0f, pa.y + ph);
+        dl->AddRectFilled(pa, pb, StAlpha(statusCol, 0.15f), ph * 0.5f);
+        dl->AddRect(pa, pb, StAlpha(statusCol, 0.40f), ph * 0.5f, 0, 1.0f);
+        dl->AddText(ImVec2(pa.x + 8.0f, pa.y + 2.0f), statusCol, statusText);
+        ImGui::Dummy(ImVec2(w, ph + 4.0f));
+    }
+
+    // Baris 2: nilai besar + unit + mini sparkbar (riwayat 5 sampel)
+    {
+        ImVec2 vpos = ImGui::GetCursorScreenPos();
+        ImFont* bigFont = g_fontSemibold ? g_fontSemibold : ImGui::GetFont();
+        float bigSize = ImGui::GetFontSize() * 1.6f;
+        dl->AddText(bigFont, bigSize, vpos, ST_WHITE, valueText);
+        ImVec2 vsz = bigFont->CalcTextSizeA(bigSize, 10000.0f, 0.0f, valueText);
+        if (unitText && unitText[0]) {
+            float uSize = ImGui::GetFontSize() * 0.85f;
+            ImVec2 usz = bigFont->CalcTextSizeA(uSize, 10000.0f, 0.0f, unitText);
+            dl->AddText(bigFont, uSize, ImVec2(vpos.x + vsz.x + 4.0f, vpos.y + vsz.y - usz.y - 2.0f), ST_CYAN, unitText);
+        }
+
+        const float barW = 6.0f, barGap = 4.0f;
+        float areaH = (std::max)(20.0f, vsz.y);
+        float ox = vpos.x + w - (barW * 5.0f + barGap * 4.0f);
+        for (int i = 0; i < 5; ++i) {
+            float v01 = (std::min)(1.0f, (std::max)(0.0f, hist5 ? hist5[i] * 0.01f : 0.0f));
+            float hh = 7.0f + v01 * (areaH - 8.0f);
+            ImVec2 ba = ImVec2(ox + (float)i * (barW + barGap), vpos.y + areaH - hh);
+            ImVec2 bb = ImVec2(ba.x + barW, vpos.y + areaH);
+            ImU32 col = (i >= 3) ? ((i == 4) ? ST_PINK : StAlpha(ST_PINK, 0.80f))
+                                 : StAlpha(ST_CYAN, (i == 1) ? 0.60f : 0.42f);
+            if (i == 4) dl->AddRectFilled(ImVec2(ba.x - 2.5f, ba.y - 2.5f), ImVec2(bb.x + 2.5f, bb.y + 2.5f), StAlpha(ST_PINK, 0.18f), 4.0f);
+            dl->AddRectFilled(ba, bb, col, 2.5f);
+        }
+        ImGui::Dummy(ImVec2(w, areaH + 2.0f));
+    }
+
+    // Baris 3: sub-info + bar starlume mini
+    if (subText && subText[0]) {
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ST_TEXT_MUTED), "%s", subText);
+    }
+    {
+        ImVec2 a = ImGui::GetCursorScreenPos();
+        ImVec2 b = ImVec2(a.x + w, a.y + 6.0f);
+        dl->AddRectFilled(a, b, ST_BG_BASE, 3.0f);
+        float fx = a.x + (b.x - a.x) * pct01;
+        if (fx > a.x + 2.0f) {
+            StGradientStarlume(dl, a, ImVec2(fx, b.y), 3.0f);
+            if (fx > a.x + 8.0f) {
+                dl->PushClipRect(a, ImVec2(fx - 1.0f, b.y), true);
+                float bw = (b.x - a.x) * 0.35f;
+                float phase = fmodf((float)ImGui::GetTime() * 0.7f, 1.0f);
+                float bx = a.x - bw + ((b.x - a.x) + 2.0f * bw) * phase;
+                ImU32 peak = StAlpha(ST_WHITE, 0.28f);
+                ImU32 none = StAlpha(ST_WHITE, 0.0f);
+                dl->AddRectFilledMultiColor(ImVec2(bx, a.y), ImVec2(bx + bw * 0.5f, b.y), none, peak, peak, none);
+                dl->AddRectFilledMultiColor(ImVec2(bx + bw * 0.5f, a.y), ImVec2(bx + bw, b.y), peak, none, none, peak);
+                dl->PopClipRect();
+            }
+        }
+        dl->AddRect(a, b, StAlpha(ST_CYAN, 0.22f), 3.0f, 0, 1.0f);
+        ImGui::Dummy(ImVec2(w, 6.0f));
+    }
+    EndGlassCard();
 }
 
 static void RenderFloatingDock() {
@@ -1909,14 +2098,124 @@ static void RenderPerformancePanel() {
     RenderPageTitle(ICON_FA_GAUGE_HIGH, "Performance & Advanced", "GPU hardware acceleration engine, frame pacing, gamer auto-sleep governor, and live telemetry.");
 
     float availW = ImGui::GetContentRegionAvail().x;
-    float comboW = (std::min)(480.0f, availW);
-    float sliderW = (std::min)(320.0f, availW);
+    ImVec2 pageStart = ImGui::GetCursorScreenPos();
+    float colGap = 16.0f;
+    float colW = (availW - colGap) * 0.5f;
+    float contentW = colW - 36.0f; // konten dalam kartu (padX 18 x 2)
 
-    // SECTION 1: Hardware Rendering Engine & Frame Rate Control
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_MICROCHIP "  Hardware Rendering Engine & Frame Rate");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
+    // ---- Sampel telemetri (5 titik, kadens ~1 dtk) utk mini sparkbar ----
+    static float telemCpu[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    static float telemRam[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    static float telemVram[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    static double telemLastT = 0.0;
+    static bool telemInit = false;
+
+    int cur_ram = g_shared_engine_state.system_ram_percent.load();
+    int cur_vram = g_shared_engine_state.gpu_vram_percent.load();
+    bool is_sleeping = g_shared_engine_state.resource_heavy_sleep.load();
+    float curCpu = g_daemonConnected ? (float)g_daemonCpuPercent : 0.0f;
+
+    double nowT = ImGui::GetTime();
+    if (!telemInit) {
+        telemInit = true;
+        telemLastT = nowT;
+        for (int i = 0; i < 5; ++i) {
+            telemCpu[i] = curCpu;
+            telemRam[i] = (float)cur_ram;
+            telemVram[i] = (float)cur_vram;
+        }
+    } else if (nowT - telemLastT >= 1.0) {
+        telemLastT = nowT;
+        for (int i = 0; i < 4; ++i) {
+            telemCpu[i] = telemCpu[i + 1];
+            telemRam[i] = telemRam[i + 1];
+            telemVram[i] = telemVram[i + 1];
+        }
+        telemCpu[4] = curCpu;
+        telemRam[4] = (float)cur_ram;
+        telemVram[4] = (float)cur_vram;
+    }
+
+    // ================= Baris telemetri (Variant 3: Startorch Telemetry Metric) =================
+    const float tileH = 148.0f;
+    {
+        const float tileGap = 14.0f;
+        float tileW = (availW - tileGap * 2.0f) / 3.0f;
+
+        char cpuVal[32];
+        char cpuSub[96];
+        const char* cpuUnit = "%";
+        const char* cpuStatus;
+        ImU32 cpuCol;
+        if (!g_daemonConnected) {
+            snprintf(cpuVal, sizeof(cpuVal), "--");
+            snprintf(cpuSub, sizeof(cpuSub), "Background engine connecting...");
+            cpuUnit = "";
+            cpuStatus = "OFFLINE";
+            cpuCol = ST_TEXT_MUTED;
+        } else {
+            snprintf(cpuVal, sizeof(cpuVal), "%.1f", (double)curCpu);
+            snprintf(cpuSub, sizeof(cpuSub), "Background engine process");
+            if (curCpu < 40.0f) { cpuStatus = "OPTIMAL"; cpuCol = ST_GREEN; }
+            else if (curCpu < 70.0f) { cpuStatus = "ELEVATED"; cpuCol = ST_GOLD; }
+            else { cpuStatus = "CRITICAL"; cpuCol = ST_RED; }
+        }
+
+        int ramTrigger = cfg.pause_on_resource_heavy ? cfg.resource_ram_threshold_pct : 85;
+        char ramVal[32];
+        char ramSub[96];
+        snprintf(ramVal, sizeof(ramVal), "%d", cur_ram);
+        snprintf(ramSub, sizeof(ramSub), "Engine working set: %zu MB", g_daemonRamMB);
+        const char* ramStatus;
+        ImU32 ramCol;
+        if (cur_ram >= ramTrigger) { ramStatus = is_sleeping ? "AUTO-SLEEP" : "HIGH"; ramCol = ST_RED; }
+        else if (cur_ram >= ramTrigger - 15) { ramStatus = "ELEVATED"; ramCol = ST_GOLD; }
+        else { ramStatus = "OPTIMAL"; ramCol = ST_GREEN; }
+
+        char vramVal[32];
+        char vramSub[128];
+        const char* vramUnit = "%";
+        float vramPct = 0.0f;
+        const char* vramStatus;
+        ImU32 vramCol;
+        if (cur_vram <= 0) {
+            snprintf(vramVal, sizeof(vramVal), "--");
+            vramUnit = "";
+            snprintf(vramSub, sizeof(vramSub), "No VRAM readout (software decode)");
+            vramStatus = "SOFTWARE";
+            vramCol = ST_CYAN;
+        } else {
+            int vramTrigger = cfg.pause_on_resource_heavy ? cfg.resource_vram_threshold_pct : 85;
+            snprintf(vramVal, sizeof(vramVal), "%d", cur_vram);
+            if (g_daemonActiveGpuIndex == -1 || !g_daemonHwDecode) {
+                snprintf(vramSub, sizeof(vramSub), "Engine video memory: %zu MB (software)", g_daemonVramMB);
+            } else {
+                snprintf(vramSub, sizeof(vramSub), "Engine video memory: %zu MB (HW decode)", g_daemonVramMB);
+            }
+            vramPct = (float)cur_vram / 100.0f;
+            if (cur_vram >= vramTrigger) { vramStatus = is_sleeping ? "AUTO-SLEEP" : "HIGH"; vramCol = ST_RED; }
+            else if (cur_vram >= vramTrigger - 15) { vramStatus = "ELEVATED"; vramCol = ST_GOLD; }
+            else { vramStatus = "OPTIMAL"; vramCol = ST_GREEN; }
+        }
+
+        TelemetryTile("TelemCPU", "ENGINE CPU LOAD", (std::min)(1.0f, (std::max)(0.0f, curCpu / 100.0f)), cpuVal, cpuUnit, cpuStatus, cpuCol, telemCpu, cpuSub, ImVec2(tileW, tileH));
+        ImGui::SetCursorScreenPos(ImVec2(pageStart.x + tileW + tileGap, pageStart.y));
+        TelemetryTile("TelemRAM", "SYSTEM RAM", (std::min)(1.0f, (std::max)(0.0f, (float)cur_ram / 100.0f)), ramVal, "%", ramStatus, ramCol, telemRam, ramSub, ImVec2(tileW, tileH));
+        ImGui::SetCursorScreenPos(ImVec2(pageStart.x + (tileW + tileGap) * 2.0f, pageStart.y));
+        TelemetryTile("TelemVRAM", "GPU VRAM", vramPct, vramVal, vramUnit, vramStatus, vramCol, telemVram, vramSub, ImVec2(tileW, tileH));
+    }
+
+    float colTopY = pageStart.y + tileH + 16.0f;
+    float leftX = pageStart.x;
+    float rightX = pageStart.x + colW + colGap;
+    float colY = colTopY;
+
+    // ================= Kolom kiri: kartu kontrol =================
+
+    // Kartu 1: Rendering Engine & Frame Rate
+    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
+    BeginGlassCard("PerfEngineCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_MICROCHIP "  RENDERING ENGINE", "MOD // 01");
 
     std::vector<std::string> deviceNames;
     std::vector<int> deviceValues;
@@ -1942,8 +2241,14 @@ static void RenderPerformancePanel() {
         comboItems.push_back(name.c_str());
     }
 
-    ImGui::SetNextItemWidth(comboW);
-    if (ImGui::Combo("Video Rendering Engine", &currentDeviceCombo, comboItems.data(), static_cast<int>(comboItems.size()))) {
+    {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 lp = ImGui::GetCursorScreenPos();
+        dl->AddText(lp, ST_TEXT_DIM, "Video Rendering Engine");
+        ImGui::Dummy(ImVec2(contentW, ImGui::GetFontSize() + 5.0f));
+    }
+    ImGui::SetNextItemWidth(contentW);
+    if (ImGui::Combo("##render_engine", &currentDeviceCombo, comboItems.data(), static_cast<int>(comboItems.size()))) {
         cfg.gpu_device_index = deviceValues[currentDeviceCombo];
         g_config.Save();
         nlohmann::json req{{"cmd", "set_render_device"}, {"gpu_index", cfg.gpu_device_index}};
@@ -1953,28 +2258,24 @@ static void RenderPerformancePanel() {
         ImGui::SetTooltip("Choose whether video decoding & rendering runs on GPU 1, GPU 2, or CPU Software.");
     }
 
-    if (StarlumeSliderInt("Target Render FPS", &cfg.target_fps, 15, 60, "", sliderW)) {
+    if (StarlumeSliderInt("Target Render FPS", &cfg.target_fps, 15, 60, "", contentW)) {
         g_config.Save();
         nlohmann::json req{{"cmd", "set_fps"}, {"fps", cfg.target_fps}};
         SendIpcAsync(req.dump());
     }
     ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), ICON_FA_CIRCLE_CHECK "  Active: %d FPS", g_daemonFps);
 
-    if (StarlumeSliderInt("Battery Saver FPS", &cfg.battery_fps, 10, 30, "", sliderW)) {
+    if (StarlumeSliderInt("Battery Saver FPS", &cfg.battery_fps, 10, 30, "", contentW)) {
         g_config.Save();
     }
+    colY += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+    // Kartu 2: Smart Resource Governor (Gaming & Heavy Load Auto-Sleep)
+    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
+    BeginGlassCard("PerfGovernorCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_GAUGE_HIGH "  RESOURCE GOVERNOR", "MOD // 02");
 
-    // SECTION 2: Smart Gaming Resource Governor
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_GAUGE_HIGH "  Smart Resource Governor (Gaming & Heavy Load Auto-Sleep)");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
-
-    if (ToggleSwitch("Auto-Sleep when System RAM or GPU VRAM is under heavy load", &cfg.pause_on_resource_heavy)) {
+    if (ToggleSwitch("Auto-Sleep on heavy RAM / VRAM load", &cfg.pause_on_resource_heavy)) {
         g_config.Save();
     }
     if (ImGui::IsItemHovered()) {
@@ -1982,25 +2283,19 @@ static void RenderPerformancePanel() {
     }
 
     if (cfg.pause_on_resource_heavy) {
-        ImGui::Indent(18.0f);
-
-        if (StarlumeSliderInt("System RAM Threshold", &cfg.resource_ram_threshold_pct, 60, 95, "%", sliderW - 18.0f)) {
+        if (StarlumeSliderInt("System RAM Threshold", &cfg.resource_ram_threshold_pct, 60, 95, "%", contentW)) {
             g_config.Save();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Triggers auto-sleep when overall PC system RAM usage hits this percentage (default 80%).");
         }
 
-        if (StarlumeSliderInt("GPU VRAM Threshold", &cfg.resource_vram_threshold_pct, 60, 95, "%", sliderW - 18.0f)) {
+        if (StarlumeSliderInt("GPU VRAM Threshold", &cfg.resource_vram_threshold_pct, 60, 95, "%", contentW)) {
             g_config.Save();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Triggers auto-sleep when GPU dedicated video memory usage hits this percentage (default 80%).");
         }
-
-        int cur_ram = g_shared_engine_state.system_ram_percent.load();
-        int cur_vram = g_shared_engine_state.gpu_vram_percent.load();
-        bool is_sleeping = g_shared_engine_state.resource_heavy_sleep.load();
 
         bool ram_high = (cur_ram >= cfg.resource_ram_threshold_pct);
         bool vram_high = (cur_vram >= cfg.resource_vram_threshold_pct);
@@ -2009,100 +2304,78 @@ static void RenderPerformancePanel() {
         snprintf(ram_buf, sizeof(ram_buf), "%d%%  (limit %d%%)", cur_ram, cfg.resource_ram_threshold_pct);
         snprintf(vram_buf, sizeof(vram_buf), "%d%%  (limit %d%%)", cur_vram, cfg.resource_vram_threshold_pct);
 
-        StarlumeBar("System RAM Usage", cur_ram / 100.0f, ram_buf, ram_high ? ST_RED : ST_GOLD, ram_high ? ST_RED : ST_WHITE);
+        StarlumeBar("System RAM Usage", cur_ram / 100.0f, ram_buf, ram_high ? ST_RED : ST_GOLD,
+                    ram_high ? ST_RED : ST_PINK_SOFT, cfg.resource_ram_threshold_pct / 100.0f);
 
         if (cur_vram > 0) {
-            SegmentedBar("GPU VRAM Usage", cur_vram / 100.0f, vram_buf, vram_high ? ST_RED : ST_GOLD);
+            StarlumeBar("GPU VRAM Usage", cur_vram / 100.0f, vram_buf, vram_high ? ST_RED : ST_GOLD,
+                        vram_high ? ST_RED : ST_PINK_SOFT, cfg.resource_vram_threshold_pct / 100.0f);
+        } else {
+            TextDim("GPU VRAM readout unavailable (software decode).");
         }
 
         if (is_sleeping) {
             ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.00f), ICON_FA_EYE_SLASH "  Auto-Sleep Active: Releasing 100% VRAM & pausing rendering for active game");
         }
-
-        ImGui::Unindent(18.0f);
     }
+    colY += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+    // Kartu 3: Video Optimization Transcoding Mode
+    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
+    BeginGlassCard("PerfOptimizerCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_EXPAND "  TRANSCODING MODE", "MOD // 03");
 
-    // SECTION 3: Video Optimization Scaling Mode
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_EXPAND "  Video Optimization Transcoding Mode");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
-
-    if (ImGui::RadioButton("Aspect Fit (Proportional - keeps entire video frame intact)", &cfg.optimizer_crop_mode, 0)) {
+    if (ImGui::RadioButton("Aspect Fit (Proportional - keeps entire frame)", &cfg.optimizer_crop_mode, 0)) {
         g_config.Save();
     }
-    if (ImGui::RadioButton("Aspect Fill / Center Crop (Exact Full Screen 1080p - zero black bars)", &cfg.optimizer_crop_mode, 1)) {
+    TextDim("Letterboxes the frame if its ratio differs from your screen.");
+    if (ImGui::RadioButton("Aspect Fill / Center Crop (zero black bars)", &cfg.optimizer_crop_mode, 1)) {
         g_config.Save();
     }
+    TextDim("Fills the screen exactly, cropping overflow edges.");
+    colY += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+    // ================= Kolom kanan: status & informasi sistem =================
 
-    // SECTION 4: Real-Time Engine Monitor & Telemetry
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_CHART_LINE "  Real-Time Engine Monitor & Telemetry");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
+    // Kartu 4: Real-Time Engine Status & Telemetry
+    float colY2 = colTopY;
+    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
+    BeginGlassCard("PerfStatusCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_CHART_LINE "  ENGINE STATUS", "SYS // 01");
 
     if (!g_daemonConnected) {
-        ImGui::TextColored(ImVec4(1.00f, 0.30f, 0.43f, 1.0f), "Engine Status: Background Engine Initializing...");
+        ImGui::TextColored(ImVec4(1.00f, 0.30f, 0.43f, 1.0f), "Background Engine Initializing...");
     } else {
         if (g_daemonPlaying && !g_daemonPaused) {
-            ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), ICON_FA_CIRCLE_CHECK "  Engine Status: Playing (Active)");
+            ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), ICON_FA_CIRCLE_CHECK "  Playing (Active)");
         } else if (g_daemonPaused) {
-            ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.00f), ICON_FA_PAUSE "  Engine Status: Paused");
+            ImGui::TextColored(ImVec4(1.00f, 0.82f, 0.40f, 1.00f), ICON_FA_PAUSE "  Paused");
         } else {
-            ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.75f, 1.00f), ICON_FA_STOP "  Engine Status: Idle");
+            ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.75f, 1.00f), ICON_FA_STOP "  Idle");
         }
 
-        ImGui::Text("Active Video: %s", g_daemonCurrentVideo.empty() ? "(None)" : g_daemonCurrentVideo.c_str());
-        ImGui::Text("Render Frame Rate: %d FPS (Video Source: %.1f FPS)", g_daemonFps, g_daemonVideoFps);
-        ImGui::Text("Video Resolution: %dx%d (%s)", g_daemonWidth, g_daemonHeight, g_daemonCodec.c_str());
-        ImGui::Text("Video Duration: %.1f seconds", g_daemonDuration);
-
-        ImGui::Spacing();
-        ImGui::Text("Process CPU Usage: %.1f %%", g_daemonCpuPercent);
-        ImGui::PlotLines("CPU (%)", g_cpuHistory.data(), (int)g_cpuHistory.size(), 0, nullptr, 0.0f, 100.0f, ImVec2(0, 50));
-
-        ImGui::Text("Process RAM (Working Set): %zu MB", g_daemonRamMB);
-        ImGui::PlotLines("RAM (MB)", g_ramHistory.data(), (int)g_ramHistory.size(), 0, nullptr, 0.0f, 100.0f, ImVec2(0, 50));
-
-        std::string monitoredGpuName = "Default Adapter";
-        if (g_daemonActiveGpuIndex == -1) {
-            monitoredGpuName = "CPU Software Mode (iGPU Presenter)";
-        } else if (g_daemonActiveGpuIndex >= 0 && g_daemonActiveGpuIndex < static_cast<int>(g_hardwareInfo.gpus.size())) {
-            const auto& gpu = g_hardwareInfo.gpus[g_daemonActiveGpuIndex];
-            monitoredGpuName = "GPU " + std::to_string(g_daemonActiveGpuIndex + 1) + ": " + gpu.name + (gpu.is_discrete ? " [dGPU]" : " [iGPU]");
-        }
-
-        ImGui::Text("Process Video Memory (%s): %zu MB", monitoredGpuName.c_str(), g_daemonVramMB);
-        std::string plotVramLabel = "VRAM: " + monitoredGpuName + " (MB)";
-        ImGui::PlotLines(plotVramLabel.c_str(), g_vramHistory.data(), (int)g_vramHistory.size(), 0, nullptr, 0.0f, 256.0f, ImVec2(0, 50));
+        std::string vidName = g_daemonCurrentVideo.empty() ? std::string("(None)") : fs::path(g_daemonCurrentVideo).filename().string();
+        ImGui::Text("Active Video: %s", StEllipsize(vidName, 34).c_str());
+        ImGui::Text("Render: %d FPS  |  Source: %.1f FPS", g_daemonFps, g_daemonVideoFps);
+        ImGui::Text("Resolution: %dx%d (%s)", g_daemonWidth, g_daemonHeight, g_daemonCodec.c_str());
+        ImGui::Text("Duration: %.1f seconds", g_daemonDuration);
     }
+    colY2 += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+    // Kartu 5: Connected Monitors Topology
+    size_t dispCount = g_hardwareInfo.displays.size();
+    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
+    BeginGlassCard("PerfMonitorsCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_TV "  CONNECTED MONITORS", "SYS // 02");
 
-    // SECTION 5: Connected Monitors Topology
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_TV "  Connected Monitors Topology");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::SameLine();
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 5.0f);
-    if (HoloButtonSmall(ICON_FA_ROTATE " Re-detect Displays")) {
+    if (HoloButtonSmall(ICON_FA_ROTATE "  RE-DETECT DISPLAYS")) {
         g_hardwareInfo.displays = HardwareDetector::GetDisplayList();
     }
 
-    if (g_hardwareInfo.displays.empty()) {
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No displays enumerated.");
+    if (dispCount == 0) {
+        TextDim("No displays enumerated.");
     } else {
-        for (size_t idx = 0; idx < g_hardwareInfo.displays.size(); ++idx) {
+        for (size_t idx = 0; idx < dispCount; ++idx) {
             const auto& disp = g_hardwareInfo.displays[idx];
             if (disp.is_primary) {
                 ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f),
@@ -2111,96 +2384,101 @@ static void RenderPerformancePanel() {
                 ImGui::TextColored(ImVec4(0.62f, 0.88f, 1.00f, 1.00f),
                     "• Display %zu [SECONDARY]: %s", idx + 1, disp.name.c_str());
             }
-            ImGui::Text("   Resolution: %d x %d  |  Refresh Rate: %d Hz  |  Desktop Position: (%d, %d)",
-                        disp.width, disp.height, disp.refresh_rate, disp.pos_x, disp.pos_y);
+            TextDim("   %d x %d  |  %d Hz  |  pos (%d, %d)",
+                    disp.width, disp.height, disp.refresh_rate, disp.pos_x, disp.pos_y);
         }
     }
+    colY2 += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+    // Kartu 6: Hardware Topology (CPU & GPU Detection)
+    size_t gpuCount = g_hardwareInfo.gpus.size();
+    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
+    BeginGlassCard("PerfHardwareCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_HARD_DRIVE "  HARDWARE TOPOLOGY", "SYS // 03");
 
-    // SECTION 6: Hardware Topology
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_MICROCHIP "  Hardware Topology (CPU & GPU Detection)");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::SameLine();
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 5.0f);
-    if (HoloButtonSmall(ICON_FA_ROTATE " Re-detect Hardware")) {
+    if (HoloButtonSmall(ICON_FA_ROTATE "  RE-DETECT HARDWARE")) {
         g_hardwareInfo = HardwareDetector::QuerySystemInfo();
     }
 
     if (g_daemonActiveGpuIndex == -1) {
         ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f),
-            "• Processor (CPU): %s [ACTIVE RENDERING ENGINE (SOFTWARE CPU)]", g_hardwareInfo.cpu.model_name.c_str());
+            "CPU: %s [SOFTWARE RENDER]", StEllipsize(g_hardwareInfo.cpu.model_name, 26).c_str());
     } else {
         ImGui::TextColored(ImVec4(0.92f, 0.93f, 0.95f, 1.00f),
-            "• Processor (CPU): %s", g_hardwareInfo.cpu.model_name.c_str());
+            "CPU: %s", StEllipsize(g_hardwareInfo.cpu.model_name, 36).c_str());
     }
-    ImGui::Text("   Cores / Topology: %d Physical Cores, %d Logical Threads",
+    TextDim("   %d physical cores / %d logical threads",
                 g_hardwareInfo.cpu.physical_cores, g_hardwareInfo.cpu.logical_cores);
 
-    if (g_hardwareInfo.gpus.empty()) {
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "• Graphics (GPU): Standard Display Adapter");
+    if (gpuCount == 0) {
+        TextDim("GPU: Standard Display Adapter");
     } else {
-        for (size_t g_idx = 0; g_idx < g_hardwareInfo.gpus.size(); ++g_idx) {
+        for (size_t g_idx = 0; g_idx < gpuCount; ++g_idx) {
             const auto& gpu = g_hardwareInfo.gpus[g_idx];
             bool is_this_gpu_active = (g_daemonActiveGpuIndex == static_cast<int>(g_idx));
             if (is_this_gpu_active) {
                 ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f),
-                    "• GPU %zu: %s (%s) [ACTIVE D3D11 RENDERER]",
-                    g_idx + 1, gpu.name.c_str(), gpu.is_discrete ? "Discrete GPU" : "Integrated iGPU");
+                    "GPU %zu: %s [ACTIVE D3D11]",
+                    g_idx + 1, StEllipsize(gpu.name, 26).c_str());
             } else {
                 ImGui::TextColored(ImVec4(0.80f, 0.82f, 0.88f, 1.00f),
-                    "• GPU %zu: %s (%s)",
-                    g_idx + 1, gpu.name.c_str(), gpu.is_discrete ? "Discrete GPU" : "Integrated iGPU");
+                    "GPU %zu: %s [%s]",
+                    g_idx + 1, StEllipsize(gpu.name, 30).c_str(), gpu.is_discrete ? "dGPU" : "iGPU");
             }
-            ImGui::Text("   Dedicated VRAM: %zu MB (%.1f GB)  |  Shared System Memory: %zu MB (%.1f GB)",
+            TextDim("   VRAM: %zu MB (%.1f GB)  |  Shared: %zu MB",
                         gpu.dedicated_vram_mb, static_cast<float>(gpu.dedicated_vram_mb) / 1024.0f,
-                        gpu.shared_vram_mb, static_cast<float>(gpu.shared_vram_mb) / 1024.0f);
+                        gpu.shared_vram_mb);
         }
     }
+    colY2 += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+    // Kartu 7: Diagnostics & Activity Logs
+    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
+    BeginGlassCard("PerfDiagCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    GlassCardHeader(ICON_FA_CIRCLE_INFO "  DIAGNOSTICS & LOGS", "SYS // 04");
 
-    // SECTION 7: Diagnostics & Logs
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_CIRCLE_INFO "  Diagnostics & Activity Logs");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Text("Desktop Injection (WorkerW): %s", g_daemonInjected ? "OK" : "FAILED");
-    if (g_daemonActiveGpuIndex == -1 || !g_daemonHwDecode) {
-        ImGui::Text("Decoder Mode: Software (CPU / swscale mode)");
+    if (g_daemonInjected) {
+        ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), "Desktop Injection (WorkerW): OK");
     } else {
-        std::string gpu_name = "GPU";
-        if (g_daemonActiveGpuIndex >= 0 && g_daemonActiveGpuIndex < static_cast<int>(g_hardwareInfo.gpus.size())) {
-            gpu_name = "GPU " + std::to_string(g_daemonActiveGpuIndex + 1) + ": " + g_hardwareInfo.gpus[g_daemonActiveGpuIndex].name;
-        }
-        ImGui::Text("Decoder Mode: Hardware D3D11VA (%s Active)", gpu_name.c_str());
+        ImGui::TextColored(ImVec4(1.00f, 0.30f, 0.43f, 1.00f), "Desktop Injection (WorkerW): FAILED");
+    }
+    if (g_daemonActiveGpuIndex == -1 || !g_daemonHwDecode) {
+        ImGui::Text("Decoder: Software (CPU swscale)");
+    } else {
+        ImGui::Text("Decoder: Hardware D3D11VA (HW decode)");
     }
     ImGui::Text("Frames Rendered: %llu", (unsigned long long)g_daemonFramesRendered);
     if (!g_daemonLastError.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Last Error: %s", g_daemonLastError.c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Last Error: %s", StEllipsize(g_daemonLastError, 28).c_str());
     } else {
         ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), "Last Error: (none)");
     }
 
-    ImGui::Spacing();
-    if (HoloButton(ICON_FA_EXPAND "  Flash Render Window (Diagnostic)", ImVec2(280, 0))) {
-        SendIpcAsync("{\"cmd\":\"test_render\"}");
-    }
-    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.65f, 1.0f),
-        "*If the desktop turns cyan after flashing, injection works.");
-
-    ImGui::Spacing();
-    if (HoloButton(ICON_FA_FOLDER_OPEN "  Open Engine Log (Notepad)", ImVec2(280, 0))) {
-        const char* appData = getenv("APPDATA");
-        if (appData) {
-            std::string logPath = std::string(appData) + "\\MiniWallpaper\\engine.log";
-            ShellExecuteA(nullptr, "open", "notepad.exe", logPath.c_str(), nullptr, SW_SHOW);
+    {
+        float btnW = (contentW - 8.0f) * 0.5f;
+        if (HoloButtonEx(ICON_FA_EXPAND "  FLASH RENDER", ImVec2(btnW, 27.0f), false, true)) {
+            SendIpcAsync("{\"cmd\":\"test_render\"}");
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Flashes the injected render window cyan for diagnostics.");
+        }
+        ImGui::SameLine(0.0f, 8.0f);
+        if (HoloButtonEx(ICON_FA_FOLDER_OPEN "  OPEN LOG", ImVec2(btnW, 27.0f), false, true)) {
+            const char* appData = getenv("APPDATA");
+            if (appData) {
+                std::string logPath = std::string(appData) + "\\MiniWallpaper\\engine.log";
+                ShellExecuteA(nullptr, "open", "notepad.exe", logPath.c_str(), nullptr, SW_SHOW);
+            }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Opens the background engine log in Notepad.");
         }
     }
+    TextDim("*Cyan flash on the desktop = injection works.");
+    colY2 += EndGlassCard() + colGap;
+
+    // Akhiri layout 2 kolom: lanjutkan dari kolom terpanjang
+    ImGui::SetCursorScreenPos(ImVec2(pageStart.x, (std::max)(colY, colY2)));
     // Ruang bawah agar konten tidak tertutup dock yg melayang
     ImGui::Dummy(ImVec2(1.0f, 72.0f));
 }
