@@ -70,6 +70,7 @@ static int    g_frame_skip = 1;
 static uint64_t g_frames_decoded = 0;
 
 static bool g_fullscreen_paused = false;
+static std::string g_loaded_video_path; // Last video successfully opened in the decoder
 
 static int ComputeFrameSkip(double video_fps, int display_fps) {
     if (video_fps <= 0.0 || video_fps > 240.0) return 1;
@@ -213,11 +214,13 @@ static bool OpenWallpaperVideo(const std::string& path) {
     g_decoder_hw = g_decoder.IsHWAccelerated();
     g_paused = false;
     g_clock.Reset();
+    g_loaded_video_path.clear();
     if (!ok) {
         g_last_error = "Failed to open video: " + path;
         Logger::Info(g_last_error);
         return false;
     }
+    g_loaded_video_path = path;
     auto info = g_decoder.GetInfo();
     g_last_error.clear();
     SetVideoPacing(info.fps);
@@ -255,6 +258,17 @@ static void ResumeWallpaper() {
     }
 
     auto& cfg = g_config.Get();
+    // Self-healing: if a wallpaper was requested while playback was suspended
+    // (e.g. Play clicked during Gaming Auto-Sleep / fullscreen pause), load it now
+    // so the user's selection starts playing without requiring another click.
+    bool need_load = false;
+    {
+        std::lock_guard<std::mutex> lock(g_decoder_mutex);
+        need_load = g_loaded_video_path.empty() && !cfg.wallpapers.empty() && !cfg.wallpapers[0].video_path.empty();
+    }
+    if (need_load) {
+        OpenWallpaperVideo(cfg.wallpapers[0].video_path);
+    }
     if (!cfg.wallpapers.empty() && cfg.wallpapers[0].audio_enabled && cfg.wallpapers[0].volume > 0.0f) {
         g_audio.Init();
     }
@@ -1307,14 +1321,20 @@ std::string OnIpcRequest(const std::string& request_json) {
             cfg.AddToGallery(path);
             g_config.Save();
 
-            bool ok = g_fullscreen_paused;
-            if (!g_fullscreen_paused) {
-                ok = OpenWallpaperVideo(path);
+            // Explicit user action (Play): load the video even while playback is
+            // auto-paused (Gaming Auto-Sleep / fullscreen / etc). Rendering stays
+            // governed, and deep suspend re-releases decoder VRAM until the system
+            // load clears - then the chosen wallpaper starts playing automatically.
+            bool ok = OpenWallpaperVideo(path);
+            if (ok) {
+                if (g_fullscreen_paused) {
+                    g_deep_suspended = false; // let the render loop re-flush & trim VRAM while paused
+                }
                 TrimWorkingSetMemory();
-                if (ok && g_main_hwnd) {
+                if (g_main_hwnd) {
                     PostMessageW(g_main_hwnd, WM_APP_ATTACH, 0, 0);
                 }
-                if (ok && (cfg.update_desktop_wallpaper || cfg.update_lockscreen)) {
+                if (cfg.update_desktop_wallpaper || cfg.update_lockscreen) {
                     int sw = GetSystemMetrics(SM_CXSCREEN);
                     int sh = GetSystemMetrics(SM_CYSCREEN);
                     bool sync_desk = cfg.update_desktop_wallpaper && (cfg.desktop_static_source_mode == 0);
@@ -1445,6 +1465,7 @@ std::string OnIpcRequest(const std::string& request_json) {
         std::lock_guard<std::mutex> lock(g_decoder_mutex);
         g_decoder.Close();
         g_current_frame = VideoFrame{};
+        g_loaded_video_path.clear();
         g_paused = true;
         SetVideoPacing(0.0);
         auto& cfg = g_config.Get();
@@ -1489,6 +1510,7 @@ std::string OnIpcRequest(const std::string& request_json) {
             std::lock_guard<std::mutex> lock(g_decoder_mutex);
             g_decoder.Close();
             g_current_frame = VideoFrame{};
+            g_loaded_video_path.clear();
 
             int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
             int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
@@ -1500,6 +1522,7 @@ std::string OnIpcRequest(const std::string& request_json) {
                 bool audio_on = !cfg.wallpapers.empty() && cfg.wallpapers[0].audio_enabled && (cfg.wallpapers[0].volume > 0.0f);
                 g_decoder.SetAudioEnabled(audio_on);
                 g_decoder.Open(current_video.c_str(), g_presenter.GetDevice(), vw, vh);
+                g_loaded_video_path = current_video;
                 g_decoder_hw = g_decoder.IsHWAccelerated();
                 g_clock.Reset();
             }
