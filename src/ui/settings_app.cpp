@@ -916,16 +916,18 @@ static int g_stGlassPendingN = 0;
 
 // size.y <= 0 → tinggi kartu mengikuti konten (auto-fit child). Latar + bracket
 // digambar di EndGlassCard setelah ukuran child final, jadi auto-height akurat.
-static void BeginGlassCard(const char* id, ImVec2 size, float padX = 18.0f, float padY = 16.0f, ImGuiWindowFlags flags = 0, bool brackets = true) {
+static void BeginGlassCard(const char* id, ImVec2 size, float padX = 22.0f, float padY = 20.0f, ImGuiWindowFlags flags = 0, bool brackets = true) {
     ImVec2 sz = size;
     ImVec2 avail = ImGui::GetContentRegionAvail();
     if (sz.x <= 0.0f) sz.x = avail.x;
 
+    ImGuiChildFlags cf = ImGuiChildFlags_None;
+    if (sz.y <= 0.0f) cf |= ImGuiChildFlags_AutoResizeY;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padX, padY));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
-    ImGui::BeginChild(id, ImVec2(sz.x, (sz.y > 0.0f) ? sz.y : 0.0f), ImGuiChildFlags_None, flags);
+    ImGui::BeginChild(id, ImVec2(sz.x, (sz.y > 0.0f) ? sz.y : 0.0f), cf, flags);
 
     if (g_stGlassPendingN < IM_ARRAYSIZE(g_stGlassPending)) {
         g_stGlassPending[g_stGlassPendingN].uid = ImGui::GetID(id);
@@ -1004,7 +1006,7 @@ static std::string StEllipsize(const std::string& s, size_t maxChars) {
 static void TelemetryTile(const char* id, const char* label, float pct01, const char* valueText, const char* unitText,
                           const char* statusText, ImU32 statusCol, const float* hist5, const char* subText, ImVec2 size) {
     pct01 = (std::min)(1.0f, (std::max)(0.0f, pct01));
-    BeginGlassCard(id, size, 16.0f, 14.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse, false);
+    BeginGlassCard(id, size, 20.0f, 18.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse, false);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     float w = ImGui::GetContentRegionAvail().x;
 
@@ -2214,7 +2216,7 @@ static void RenderPerformancePanel() {
 
     // Kartu 1: Rendering Engine & Frame Rate
     ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
-    BeginGlassCard("PerfEngineCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    BeginGlassCard("PerfEngineCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     GlassCardHeader(ICON_FA_MICROCHIP "  RENDERING ENGINE", "MOD // 01");
 
     std::vector<std::string> deviceNames;
@@ -2272,7 +2274,7 @@ static void RenderPerformancePanel() {
 
     // Kartu 2: Smart Resource Governor (Gaming & Heavy Load Auto-Sleep)
     ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
-    BeginGlassCard("PerfGovernorCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    BeginGlassCard("PerfGovernorCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     GlassCardHeader(ICON_FA_GAUGE_HIGH "  RESOURCE GOVERNOR", "MOD // 02");
 
     if (ToggleSwitch("Auto-Sleep on heavy RAM / VRAM load", &cfg.pause_on_resource_heavy)) {
@@ -2322,7 +2324,7 @@ static void RenderPerformancePanel() {
 
     // Kartu 3: Video Optimization Transcoding Mode
     ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
-    BeginGlassCard("PerfOptimizerCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    BeginGlassCard("PerfOptimizerCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     GlassCardHeader(ICON_FA_EXPAND "  TRANSCODING MODE", "MOD // 03");
 
     if (ImGui::RadioButton("Aspect Fit (Proportional - keeps entire frame)", &cfg.optimizer_crop_mode, 0)) {
@@ -2340,7 +2342,7 @@ static void RenderPerformancePanel() {
     // Kartu 4: Real-Time Engine Status & Telemetry
     float colY2 = colTopY;
     ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("PerfStatusCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    BeginGlassCard("PerfStatusCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     GlassCardHeader(ICON_FA_CHART_LINE "  ENGINE STATUS", "SYS // 01");
 
     if (!g_daemonConnected) {
@@ -2365,7 +2367,7 @@ static void RenderPerformancePanel() {
     // Kartu 5: Connected Monitors Topology
     size_t dispCount = g_hardwareInfo.displays.size();
     ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("PerfMonitorsCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    BeginGlassCard("PerfMonitorsCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     GlassCardHeader(ICON_FA_TV "  CONNECTED MONITORS", "SYS // 02");
 
     if (HoloButtonSmall(ICON_FA_ROTATE "  RE-DETECT DISPLAYS")) {
@@ -2393,7 +2395,7 @@ static void RenderPerformancePanel() {
     // Kartu 6: Hardware Topology (CPU & GPU Detection)
     size_t gpuCount = g_hardwareInfo.gpus.size();
     ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("PerfHardwareCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    BeginGlassCard("PerfHardwareCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     GlassCardHeader(ICON_FA_HARD_DRIVE "  HARDWARE TOPOLOGY", "SYS // 03");
 
     if (HoloButtonSmall(ICON_FA_ROTATE "  RE-DETECT HARDWARE")) {
@@ -2434,7 +2436,7 @@ static void RenderPerformancePanel() {
 
     // Kartu 7: Diagnostics & Activity Logs
     ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
-    BeginGlassCard("PerfDiagCard", ImVec2(colW, 0.0f), 18.0f, 16.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    BeginGlassCard("PerfDiagCard", ImVec2(colW, 0.0f), 22.0f, 20.0f, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     GlassCardHeader(ICON_FA_CIRCLE_INFO "  DIAGNOSTICS & LOGS", "SYS // 04");
 
     if (g_daemonInjected) {
