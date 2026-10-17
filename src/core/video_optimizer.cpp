@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
+#include <mutex>
+#include <unordered_map>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -29,53 +31,92 @@ VideoOptimizer::~VideoOptimizer() {
     Cancel();
 }
 
+// Probe results are cached by (file size, last write time). The gallery UI calls
+// Probe() for every card on every rendered frame, and avformat_open_input +
+// avformat_find_stream_info is far too expensive to repeat per frame: under
+// disk/CPU load it blocked the main render loop, making the wallpaper video
+// stutter (slow motion) and UI hover effects lag.
+namespace {
+struct ProbeCacheEntry {
+    uintmax_t file_size = 0;
+    fs::file_time_type mtime{};
+    VideoProbeResult result;
+};
+
+std::mutex g_probe_cache_mutex;
+std::unordered_map<std::string, ProbeCacheEntry> g_probe_cache;
+} // namespace
+
 VideoProbeResult VideoOptimizer::Probe(const std::string& input_path) {
     VideoProbeResult res;
     if (input_path.empty()) return res;
 
-    AVFormatContext* fmt_ctx = nullptr;
-    if (avformat_open_input(&fmt_ctx, input_path.c_str(), nullptr, nullptr) < 0) {
-        return res;
-    }
+    // Cache key: file size + last write time (cheap stats vs. full demux).
+    std::error_code fs_ec;
+    uintmax_t file_size = fs::file_size(input_path, fs_ec);
+    if (fs_ec) return res; // missing/unreadable
+    fs::file_time_type mtime = fs::last_write_time(input_path, fs_ec);
+    if (fs_ec) return res;
 
-    if (avformat_find_stream_info(fmt_ctx, nullptr) < 0) {
-        avformat_close_input(&fmt_ctx);
-        return res;
-    }
-
-    for (unsigned int i = 0; i < fmt_ctx->nb_streams; ++i) {
-        AVStream* st = fmt_ctx->streams[i];
-        if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && res.width == 0) {
-            res.width = st->codecpar->width;
-            res.height = st->codecpar->height;
-            if (st->avg_frame_rate.den > 0) {
-                res.fps = av_q2d(st->avg_frame_rate);
-            }
-            const AVCodec* c = avcodec_find_decoder(st->codecpar->codec_id);
-            res.codec_name = c ? c->name : "unknown";
-            res.valid = (res.width > 0 && res.height > 0);
-        } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            res.has_audio = true;
+    {
+        std::lock_guard<std::mutex> lock(g_probe_cache_mutex);
+        auto it = g_probe_cache.find(input_path);
+        if (it != g_probe_cache.end() &&
+            it->second.file_size == file_size && it->second.mtime == mtime) {
+            return it->second.result;
         }
     }
 
-    if (fmt_ctx->duration > 0) {
-        res.duration = static_cast<double>(fmt_ctx->duration) / AV_TIME_BASE;
+    AVFormatContext* fmt_ctx = nullptr;
+    if (avformat_open_input(&fmt_ctx, input_path.c_str(), nullptr, nullptr) >= 0) {
+        if (avformat_find_stream_info(fmt_ctx, nullptr) >= 0) {
+            for (unsigned int i = 0; i < fmt_ctx->nb_streams; ++i) {
+                AVStream* st = fmt_ctx->streams[i];
+                if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && res.width == 0) {
+                    res.width = st->codecpar->width;
+                    res.height = st->codecpar->height;
+                    if (st->avg_frame_rate.den > 0) {
+                        res.fps = av_q2d(st->avg_frame_rate);
+                    }
+                    const AVCodec* c = avcodec_find_decoder(st->codecpar->codec_id);
+                    res.codec_name = c ? c->name : "unknown";
+                    res.valid = (res.width > 0 && res.height > 0);
+                } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                    res.has_audio = true;
+                }
+            }
+
+            if (fmt_ctx->duration > 0) {
+                res.duration = static_cast<double>(fmt_ctx->duration) / AV_TIME_BASE;
+            }
+        }
+        avformat_close_input(&fmt_ctx);
     }
 
-    avformat_close_input(&fmt_ctx);
+    {
+        std::lock_guard<std::mutex> lock(g_probe_cache_mutex);
+        g_probe_cache[input_path] = ProbeCacheEntry{ file_size, mtime, res };
+    }
     return res;
 }
 
 static std::string GetCacheDirectory() {
+    // Session-stable, so cache it: the gallery calls this (via GetOptimizedPath /
+    // HasOptimizedCache) for every card on every frame and SHGetFolderPath +
+    // create_directories are pointless per-frame syscalls.
+    static std::mutex mtx;
+    static std::string cached;
+    std::lock_guard<std::mutex> lock(mtx);
+    if (!cached.empty()) return cached;
+
     char path[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_APPDATA, nullptr, 0, path))) {
         std::string dir = std::string(path) + "\\MiniWallpaper\\optimized";
         std::error_code ec;
         fs::create_directories(dir, ec);
-        return dir;
+        cached = dir;
     }
-    return "";
+    return cached;
 }
 
 static uint64_t HashString(const std::string& str) {

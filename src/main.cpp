@@ -775,9 +775,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
 
         if (!g_running) break;
 
-        // Render Settings UI if open
+        // Render Settings UI if open.
+        // Rate-limited: ~60 fps target when focused, ~15 fps when in background
+        // (avoids burning CPU/GPU on an occluded window, e.g. while gaming).
         if (SettingsUI::IsOpen()) {
-            SettingsUI::RenderFrame();
+            static uint64_t last_ui_render_us = 0;
+            uint64_t now_ui_us = g_clock.GetCurrentTimeMicros();
+            bool ui_focused = (GetForegroundWindow() == SettingsUI::GetHwnd());
+            uint64_t ui_interval_us = ui_focused ? 16000 : 66000;
+            if (now_ui_us - last_ui_render_us >= ui_interval_us) {
+                last_ui_render_us = now_ui_us;
+                SettingsUI::RenderFrame();
+            }
         }
 
         // Recreate render window if Explorer destroyed it
@@ -930,7 +939,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
                 Logger::Info("Deep suspend active: released decoder VRAM & trimmed working set");
             }
 
-            MsgWaitForMultipleObjects(0, nullptr, FALSE, 100, QS_ALLINPUT);
+            // Keep the settings UI responsive while the wallpaper is suspended
+            DWORD idleWaitMs = SettingsUI::IsOpen() ? 16 : 100;
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, idleWaitMs, QS_ALLINPUT);
             continue;
         } else if (g_fullscreen_paused) {
             ResumeWallpaper();
@@ -967,7 +978,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
                 TrimWorkingSetMemory();
                 Logger::Info("Deep suspend active: released decoder VRAM & trimmed working set");
             }
-            MsgWaitForMultipleObjects(0, nullptr, FALSE, 100, QS_ALLINPUT);
+            // Keep the settings UI responsive while playback is paused
+            DWORD idleWaitMs = SettingsUI::IsOpen() ? 16 : 100;
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, idleWaitMs, QS_ALLINPUT);
             continue;
         } else if (!g_fullscreen_paused && g_deep_suspended) {
             g_deep_suspended = false;
