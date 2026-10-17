@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <string>
 
 namespace miniwp {
 
@@ -26,6 +27,9 @@ public:
     // Set active tab/page (0=Gallery, 1=Lockscreen, 2=General, 3=Performance)
     static void SetActivePage(int page);
     static int GetActivePage();
+
+    // Capture pixel-perfect screenshot of the active UI to PNG via WIC
+    static bool SaveScreenshot(const std::string& path);
 };
 
 } // namespace miniwp

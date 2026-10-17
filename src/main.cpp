@@ -660,15 +660,64 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
         SettingsUI::SetActivePage(targetPage);
     }
 
+    // Check --screenshot argument
+    std::string screenshotPath;
+    if (lpCmdLine) {
+        const wchar_t* p = wcsstr(lpCmdLine, L"--screenshot");
+        if (!p) p = wcsstr(lpCmdLine, L"-screenshot");
+        if (p) {
+            p += (wcsstr(p, L"--screenshot") == p) ? 12 : 11;
+            while (*p == L' ' || *p == L'=' || *p == L':') p++;
+            bool inQuotes = (*p == L'"');
+            if (inQuotes) p++;
+            std::wstring wsc;
+            while (*p && (inQuotes ? (*p != L'"') : (*p != L' '))) { wsc += *p; p++; }
+            int len = WideCharToMultiByte(CP_UTF8, 0, wsc.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (len > 0) {
+                std::string s(len, 0);
+                WideCharToMultiByte(CP_UTF8, 0, wsc.c_str(), -1, &s[0], len, nullptr, nullptr);
+                if (!s.empty() && s.back() == '\0') s.pop_back();
+                screenshotPath = s;
+            }
+        }
+    }
+
     // Single-Instance Check
     HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"MiniWallpaper_SingleInstance_Mutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        if (!screenshotPath.empty()) {
+            IpcClient client;
+            nlohmann::json r = {{"cmd", "capture_ui"}, {"path", screenshotPath}};
+            if (targetPage >= 0) r["page"] = targetPage;
+            client.SendRequest(r.dump());
+            if (hMutex) CloseHandle(hMutex);
+            return 0;
+        }
         if (!is_silent_boot) {
             IpcClient client;
             nlohmann::json r = {{"cmd", "open_settings"}};
             if (targetPage >= 0) r["page"] = targetPage;
             client.SendRequest(r.dump());
         }
+        if (hMutex) CloseHandle(hMutex);
+        return 0;
+    }
+
+    if (!screenshotPath.empty()) {
+        g_config.Load();
+        if (targetPage >= 0) SettingsUI::SetActivePage(targetPage);
+        SettingsUI::Open(hInstance);
+        for (int f = 0; f < 25; ++f) {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            SettingsUI::RenderFrame();
+            Sleep(16);
+        }
+        SettingsUI::SaveScreenshot(screenshotPath);
+        SettingsUI::Shutdown();
         if (hMutex) CloseHandle(hMutex);
         return 0;
     }
@@ -1370,6 +1419,28 @@ std::string OnIpcRequest(const std::string& request_json) {
             PostMessageW(g_main_hwnd, WM_APP_OPEN_SETTINGS, 0, 0);
         }
         return "{\"ok\":true}";
+    } else if (cmd == "capture_ui") {
+        if (req.contains("page") && req["page"].is_number_integer()) {
+            SettingsUI::SetActivePage(req["page"].get<int>());
+        }
+        std::string path = req.value("path", "");
+        if (!path.empty()) {
+            if (!SettingsUI::IsOpen()) {
+                SettingsUI::Open(GetModuleHandleW(nullptr));
+            }
+            for (int f = 0; f < 25; ++f) {
+                MSG msg;
+                while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+                SettingsUI::RenderFrame();
+                Sleep(16);
+            }
+            bool ok = SettingsUI::SaveScreenshot(path);
+            return nlohmann::json{{"ok", ok}, {"path", path}}.dump();
+        }
+        return "{\"ok\":false,\"error\":\"missing path\"}";
     } else if (cmd == "set_wallpaper") {
         std::string path = req.value("path", "");
         if (!path.empty()) {

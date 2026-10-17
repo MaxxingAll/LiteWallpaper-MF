@@ -10,6 +10,8 @@
 #include <shellapi.h>
 #include <commdlg.h>
 #include <oleidl.h>
+#include <wincodec.h>
+#pragma comment(lib, "windowscodecs.lib")
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -148,8 +150,8 @@ static void SetupImGuiStyle() {
 
     colors[ImGuiCol_Text]                  = ImVec4(0.945f, 0.961f, 0.976f, 1.00f);
     colors[ImGuiCol_TextDisabled]          = ImVec4(0.580f, 0.639f, 0.722f, 1.00f);
-    colors[ImGuiCol_WindowBg]              = ImVec4(0.032f, 0.045f, 0.078f, 0.72f);
-    colors[ImGuiCol_ChildBg]               = ImVec4(0.055f, 0.075f, 0.125f, 0.65f);
+    colors[ImGuiCol_WindowBg]              = ImVec4(0.032f, 0.045f, 0.078f, 0.50f);
+    colors[ImGuiCol_ChildBg]               = ImVec4(0.055f, 0.075f, 0.125f, 0.50f);
     colors[ImGuiCol_PopupBg]               = ImVec4(0.067f, 0.090f, 0.149f, 0.95f);
     colors[ImGuiCol_Border]                = ImVec4(0.220f, 0.910f, 1.000f, 0.18f);
     colors[ImGuiCol_BorderShadow]          = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
@@ -507,8 +509,8 @@ static void DrawFloatingShadow(ImVec2 p0, ImVec2 p1, float rounding) {
 #define ST_BG_BASE     IM_COL32(9, 12, 21, 255)
 #define ST_PANEL       IM_COL32(17, 23, 38, 245)
 #define ST_PANEL_ELEV  IM_COL32(23, 32, 53, 255)
-#define ST_GLASS       IM_COL32(20, 28, 46, 235)
-#define ST_GLASS_HOVER IM_COL32(29, 41, 66, 244)
+#define ST_GLASS       IM_COL32(20, 28, 46, 195)
+#define ST_GLASS_HOVER IM_COL32(29, 41, 66, 215)
 #define ST_CYAN        IM_COL32(56, 232, 255, 255)
 #define ST_WHITE       IM_COL32(241, 245, 249, 255)
 #define ST_TEXT        IM_COL32(241, 245, 249, 255)
@@ -1121,28 +1123,33 @@ static void TelemetryTile(const char* id, const char* label, float pct01, const 
 }
 
 static void RenderFloatingDock() {
-    const float dockW = 320.0f;
-    const float dockH = 56.0f;
-    // Overlay absolut di atas konten + bayangan (seperti z-index di web).
+    const float btnW = 44.0f;
+    const float btnH = 34.0f;
+    const float btnGap = 6.0f;
+    const float padX = 6.0f;
+    const float padY = 5.0f;
+    const float dockW = padX * 2.0f + 4.0f * btnW + 3.0f * btnGap; // 206.0f
+    const float dockH = padY * 2.0f + btnH;                          // 44.0f
+    const float dockRounding = dockH * 0.5f;                         // 22.0f
+    const float pillRounding = 12.0f;
+
+    // Overlay absolut di atas konten + bayangan lembut melayang
     ImVec2 winPos = ImGui::GetWindowPos();
     ImVec2 winSize = ImGui::GetWindowSize();
-    ImVec2 dockPos = ImVec2(winPos.x + (winSize.x - dockW) * 0.5f, winPos.y + winSize.y - dockH - 14.0f);
-    DrawFloatingShadow(dockPos, ImVec2(dockPos.x + dockW, dockPos.y + dockH), 28.0f);
+    ImVec2 dockPos = ImVec2(winPos.x + (winSize.x - dockW) * 0.5f, winPos.y + winSize.y - dockH - 12.0f);
+    DrawFloatingShadow(dockPos, ImVec2(dockPos.x + dockW, dockPos.y + dockH), 22.0f);
     ImGui::SetCursorScreenPos(dockPos);
-    // Reserve bottom space so dock floats above content edge
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 28.0f);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, dockRounding);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.065f, 0.090f, 0.155f, 0.60f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padX, padY));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.065f, 0.090f, 0.155f, 0.65f));
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.220f, 0.910f, 1.000f, 0.35f));
     ImGui::BeginChild("FloatingDock", ImVec2(dockW, dockH), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     {
         static const char* icons[4] = { ICON_FA_IMAGES, ICON_FA_LOCK, ICON_FA_SLIDERS, ICON_FA_GAUGE_HIGH };
         static const char* tips[4] = { "Wallpaper Gallery", "Lock Screen & Static", "General Settings", "Performance & Advanced" };
         ImVec2 dockOrigin = ImGui::GetCursorScreenPos();
-        float slotW = (dockW - 20.0f) / 4.0f;
-        float btnW = 52.0f;
-        float btnH = 40.0f;
 
         // Animasi perpindahan halaman yang sangat halus (smooth sliding pill)
         static float s_dockAnimPage = -1.0f;
@@ -1160,20 +1167,20 @@ static void RenderFloatingDock() {
 
         ImDrawList* dl = ImGui::GetWindowDrawList();
 
-        // 1. Sliding Glowing Active Capsule
-        float curPillX = dockOrigin.x + s_dockAnimPage * slotW + (slotW - btnW) * 0.5f;
+        // 1. Sliding Glowing Active Capsule (fit mepet, tanpa garis bawah)
+        float curPillX = dockOrigin.x + s_dockAnimPage * (btnW + btnGap);
         float curPillY = dockOrigin.y;
         ImVec2 a = ImVec2(curPillX, curPillY);
         ImVec2 b = ImVec2(curPillX + btnW, curPillY + btnH);
 
-        DrawGlowRect(dl, a, b, 16.0f, ST_CYAN, 0.80f);
-        dl->AddRectFilled(a, b, StAlpha(ST_CYAN, 0.22f), 16.0f);
-        dl->AddRect(a, b, StAlpha(ST_CYAN, 0.65f), 16.0f, 0, 1.2f);
-        StGradientBar(dl, ImVec2(a.x + btnW * 0.25f, b.y - 4.0f), ImVec2(b.x - btnW * 0.25f, b.y - 1.5f), 1.25f, StAlpha(ST_CYAN, 0.60f), ST_WHITE);
+        DrawGlowRect(dl, a, b, pillRounding, ST_CYAN, 0.70f);
+        dl->AddRectFilled(a, b, StAlpha(ST_CYAN, 0.22f), pillRounding);
+        dl->AddRect(a, b, StAlpha(ST_CYAN, 0.65f), pillRounding, 0, 1.2f);
+        // Note: Garis bawah (StGradientBar) sudah dimatikan sesuai permintaan user
 
         // 2. Interactive buttons & icon cross-fading
         for (int i = 0; i < 4; ++i) {
-            ImVec2 bp0 = ImVec2(dockOrigin.x + i * slotW + (slotW - btnW) * 0.5f, dockOrigin.y);
+            ImVec2 bp0 = ImVec2(dockOrigin.x + i * (btnW + btnGap), dockOrigin.y);
             ImGui::SetCursorScreenPos(bp0);
             char btnId[32]; snprintf(btnId, sizeof(btnId), "##dock%d", i);
 
@@ -1185,7 +1192,7 @@ static void RenderFloatingDock() {
             ImU32 iconCol = StMix(ST_WHITE, (hov ? ST_CYAN : ST_TEXT_DIM), dist);
 
             if (hov && dist > 0.45f) {
-                dl->AddRectFilled(bp0, ImVec2(bp0.x + btnW, bp0.y + btnH), StAlpha(ST_CYAN, 0.08f), 16.0f);
+                dl->AddRectFilled(bp0, ImVec2(bp0.x + btnW, bp0.y + btnH), StAlpha(ST_CYAN, 0.08f), pillRounding);
             }
 
             ImVec2 isz = ImGui::CalcTextSize(icons[i]);
@@ -1202,7 +1209,7 @@ static void RenderFloatingDock() {
     {
         ImDrawList* gdl = ImGui::GetWindowDrawList();
         ImVec2 dMin = ImGui::GetItemRectMin(), dMax = ImGui::GetItemRectMax();
-        gdl->AddLine(ImVec2(dMin.x + 26.0f, dMin.y + 1.5f), ImVec2(dMax.x - 26.0f, dMin.y + 1.5f), IM_COL32(255, 255, 255, 48), 1.0f);
+        gdl->AddLine(ImVec2(dMin.x + 20.0f, dMin.y + 1.5f), ImVec2(dMax.x - 20.0f, dMin.y + 1.5f), IM_COL32(255, 255, 255, 45), 1.0f);
     }
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
@@ -1539,7 +1546,8 @@ static void RenderGalleryTab() {
 
     ImGui::SetCursorScreenPos(gridRowTop);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
-    ImGui::BeginChild("GalleryGrid", ImVec2(gridAvailW, gridH), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 10.0f));
+    ImGui::BeginChild("GalleryGrid", ImVec2(gridAvailW, gridH), false, 0);
 
     float availW = ImGui::GetContentRegionAvail().x;
     float cardMinW = 230.0f;
@@ -1694,9 +1702,10 @@ static void RenderGalleryTab() {
     }
 
     // Ruang bawah agar baris terakhir bisa scroll ke atas dock yg melayang
-    ImGui::Dummy(ImVec2(1.0f, 84.0f));
+    ImGui::Dummy(ImVec2(1.0f, 54.0f));
 
     ImGui::EndChild();
+    ImGui::PopStyleVar();
     ImGui::PopStyleColor();
 
     if (showDetail) {
@@ -1734,20 +1743,55 @@ static void RenderGalleryTab() {
     RenderSidePillOverlay(gridRowTop, gridH);
 }
 
-// Judul halaman gaya LuaTools: tebal besar + deskripsi abu-abu.
+// Header bar modern & cantik: strip kaca ramping, badge ikon menyala, judul tebal + subjudul inline.
 static void RenderPageTitle(const char* icon, const char* title, const char* desc) {
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::SetWindowFontScale(1.4f);
-    ImGui::TextColored(ImVec4(0.96f, 0.97f, 0.99f, 1.0f), "%s  %s", icon, title);
-    ImGui::SetWindowFontScale(1.0f);
-    if (g_fontSemibold) ImGui::PopFont();
+    float availW = ImGui::GetContentRegionAvail().x;
+    const float headerH = 34.0f;
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // 1. Subtle glass background strip
+    ImVec2 b0 = pos;
+    ImVec2 b1 = ImVec2(pos.x + availW, pos.y + headerH);
+    dl->AddRectFilled(b0, b1, IM_COL32(14, 20, 34, 150), 8.0f);
+    dl->AddRect(b0, b1, IM_COL32(56, 232, 255, 38), 8.0f, 0, 1.0f);
+
+    // 2. Icon Badge
+    const float badgeSz = 24.0f;
+    ImVec2 badge0 = ImVec2(pos.x + 5.0f, pos.y + 5.0f);
+    ImVec2 badge1 = ImVec2(badge0.x + badgeSz, badge0.y + badgeSz);
+    dl->AddRectFilled(badge0, badge1, IM_COL32(56, 232, 255, 32), 6.0f);
+    dl->AddRect(badge0, badge1, IM_COL32(56, 232, 255, 75), 6.0f, 0, 1.0f);
+
+    ImVec2 icoSz = ImGui::CalcTextSize(icon);
+    dl->AddText(ImVec2(badge0.x + (badgeSz - icoSz.x) * 0.5f, badge0.y + (badgeSz - icoSz.y) * 0.5f), IM_COL32(56, 232, 255, 255), icon);
+
+    // 3. Title text (Semibold)
+    ImFont* font = g_fontSemibold ? g_fontSemibold : ImGui::GetFont();
+    float fsize = ImGui::GetFontSize();
+    float textY = pos.y + (headerH - fsize) * 0.5f;
+    float textX = badge1.x + 10.0f;
+
+    dl->AddText(font, fsize, ImVec2(textX, textY), IM_COL32(245, 248, 252, 255), title);
+    float titleW = font->CalcTextSizeA(fsize, 1000.0f, 0.0f, title).x;
+
+    // 4. Dot separator and description
     if (desc && desc[0] != '\0') {
-        ImGui::Dummy(ImVec2(0.0f, 4.0f));
-        ImGui::TextColored(ImVec4(0.63f, 0.67f, 0.75f, 1.0f), "%s", desc);
+        float dotX = textX + titleW + 8.0f;
+        const char* dotStr = "•";
+        dl->AddText(ImVec2(dotX, textY), IM_COL32(56, 232, 255, 140), dotStr);
+        float dotW = ImGui::CalcTextSize(dotStr).x;
+
+        float descX = dotX + dotW + 8.0f;
+        float remainingW = (b1.x - 12.0f) - descX;
+        if (remainingW > 60.0f) {
+            dl->PushClipRect(ImVec2(descX, pos.y), ImVec2(b1.x - 12.0f, b1.y), true);
+            dl->AddText(ImVec2(descX, textY), IM_COL32(148, 163, 184, 240), desc);
+            dl->PopClipRect();
+        }
     }
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
-    ImGui::Separator();
-    ImGui::Dummy(ImVec2(0.0f, 14.0f));
+
+    ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + headerH + 12.0f));
 }
 
 static void RenderLockscreenTab() {
@@ -1974,7 +2018,7 @@ static void RenderLockscreenTab() {
 
     colY2 += EndGlassCard() + colGap;
 
-    float finalH = (std::max)(colY, colY2) + 110.0f;
+    float finalH = (std::max)(colY, colY2) + 40.0f;
     ImGui::SetCursorScreenPos(ImVec2(leftX, finalH));
     ImGui::Dummy(ImVec2(1.0f, 1.0f));
 }
@@ -1985,30 +2029,41 @@ static void RenderGeneralSettingsTab() {
     RenderPageTitle(ICON_FA_SLIDERS, "General Settings", "Configure display scaling, master volume, Windows autostart, and power-saving rules.");
 
     float availW = ImGui::GetContentRegionAvail().x;
-    float comboW = (std::min)(480.0f, availW);
-    float sliderW = (std::min)(320.0f, availW);
+    ImVec2 pageStart = ImGui::GetCursorScreenPos();
+    bool isNarrow = (availW < 680.0f);
+    float colGap = 16.0f;
+    float colW = isNarrow ? availW : (availW - colGap) * 0.5f;
+    const float cardPadX = 22.0f;
+    const float cardPadY = 18.0f;
+    float contentW = colW - cardPadX * 2.0f;
 
-    // SECTION 1: Display Scaling Mode
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_EXPAND "  Display Scaling & Multi-Monitor");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
+    float leftX = pageStart.x;
+    float rightX = isNarrow ? pageStart.x : (pageStart.x + colW + colGap);
+    float colY = pageStart.y;
+    float colY2 = isNarrow ? 0.0f : pageStart.y;
+
+    // ================= KOLOM KIRI =================
+
+    // KARTU 1: Display Scaling & Multi-Monitor
+    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
+    BeginGlassCard("DisplayCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_EXPAND "  DISPLAY & SCALING");
 
     static const char* scalingModes[] = {
-        "Auto Aspect Fill (Cover - Smart Crop, No Black Bars)",
-        "Aspect Fit (Letterbox - Full Frame with Black Bars)",
-        "Stretch to Screen (Ignore Aspect Ratio)"
+        "Auto Aspect Fill (Cover - Smart Crop)",
+        "Aspect Fit (Letterbox - Black Bars)",
+        "Stretch to Screen (Ignore Ratio)"
     };
     int currentMode = cfg.scaling_mode;
-    ImGui::SetNextItemWidth(comboW);
-    if (ImGui::Combo("Display Scaling Mode", &currentMode, scalingModes, IM_ARRAYSIZE(scalingModes))) {
+    ImGui::SetNextItemWidth(contentW);
+    if (ImGui::Combo("##scalingMode", &currentMode, scalingModes, IM_ARRAYSIZE(scalingModes))) {
         cfg.scaling_mode = currentMode;
         g_config.Save();
         nlohmann::json req{{"cmd", "set_scaling"}, {"mode", currentMode}};
         SendIpcAsync(req.dump());
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Changes how video fits the screen.\n*Note: Effect is visible when video aspect ratio differs from display\n (e.g. 4:3, 21:9 ultrawide, or vertical video on 16:9 screen).");
+        ImGui::SetTooltip("Changes how video fits the screen when aspect ratio differs from display.");
     }
 
     if (!g_hardwareInfoInit) {
@@ -2017,11 +2072,12 @@ static void RenderGeneralSettingsTab() {
     }
 
     if (g_hardwareInfo.displays.size() > 1) {
-        ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.75f, 1.0f), "Target Desktop Screen(s):");
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        TextDim("Target Desktop Display(s):");
+        ImGui::Dummy(ImVec2(0.0f, 2.0f));
 
         bool all_checked = cfg.target_displays.empty() || (cfg.target_displays.size() == g_hardwareInfo.displays.size());
-        if (ToggleSwitch("All Monitors (Apply to All Desktops)", &all_checked)) {
+        if (ToggleSwitch("All Monitors", &all_checked)) {
             if (all_checked) {
                 cfg.target_displays.clear();
             } else {
@@ -2035,9 +2091,7 @@ static void RenderGeneralSettingsTab() {
         for (size_t d = 0; d < g_hardwareInfo.displays.size(); ++d) {
             const auto& disp = g_hardwareInfo.displays[d];
             bool is_d_checked = cfg.IsDisplayEnabled(static_cast<int>(d));
-            std::string label = "Display " + std::to_string(d + 1) + ": " + disp.name + " (" +
-                                std::to_string(disp.width) + "x" + std::to_string(disp.height) + ")" +
-                                (disp.is_primary ? " [Primary]" : " [Secondary]");
+            std::string label = "Display " + std::to_string(d + 1) + (disp.is_primary ? " (Primary)" : " (Secondary)");
             if (ToggleSwitch(label.c_str(), &is_d_checked)) {
                 cfg.SetDisplayEnabled(static_cast<int>(d), is_d_checked);
                 g_config.Save();
@@ -2046,16 +2100,12 @@ static void RenderGeneralSettingsTab() {
             }
         }
     }
+    colY += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    // SECTION 2: Audio Configuration
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_VOLUME_HIGH "  Audio Configuration");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
+    // KARTU 2: Audio & Playback Output
+    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
+    BeginGlassCard("AudioCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_VOLUME_HIGH "  AUDIO & VOLUME");
 
     static float volume = 0.0f;
     static bool volume_init = false;
@@ -2064,7 +2114,7 @@ static void RenderGeneralSettingsTab() {
         volume_init = true;
     }
 
-    if (StarlumeSliderFloat("Master Volume", &volume, 0.0f, 1.0f, 2, "", sliderW)) {
+    if (StarlumeSliderFloat("Master Volume", &volume, 0.0f, 1.0f, 2, "", contentW)) {
         if (!cfg.wallpapers.empty()) {
             cfg.wallpapers[0].volume = volume;
         }
@@ -2072,16 +2122,13 @@ static void RenderGeneralSettingsTab() {
         nlohmann::json req{{"cmd", "set_volume"}, {"volume", volume}};
         SendIpcAsync(req.dump());
     }
+    TextDim("  Controls background video audio volume level.");
+    colY += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    // SECTION 3: Windows Startup & Automation
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_DESKTOP "  Windows Startup & Automation");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
+    // KARTU 3: Windows Startup
+    ImGui::SetCursorScreenPos(ImVec2(leftX, colY));
+    BeginGlassCard("StartupCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_DESKTOP "  WINDOWS STARTUP");
 
     static bool startup_inited = false;
     static bool startup_enabled = false;
@@ -2090,47 +2137,43 @@ static void RenderGeneralSettingsTab() {
         startup_inited = true;
     }
 
-    if (ToggleSwitch("Start MiniWallpaper automatically on Windows Boot", &startup_enabled)) {
+    if (ToggleSwitch("Start MiniWallpaper on Windows Boot", &startup_enabled)) {
         WindowsAutostart::SetEnabled(startup_enabled, 0);
         cfg.run_on_startup = startup_enabled;
         g_config.Save();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Launches MiniWallpaper silently in the background when Windows starts, seamlessly resuming your wallpaper.");
+        ImGui::SetTooltip("Launches MiniWallpaper silently on Windows boot to instantly resume wallpaper.");
     }
+    TextDim("  Runs silently in the system tray when Windows boots.");
+    colY += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+    // ================= KOLOM KANAN =================
+    if (isNarrow) colY2 = colY;
 
-    // SECTION 4: Power & Occlusion Auto-Pause Rules
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_BATTERY_HALF "  Power & Occlusion Auto-Pause");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
+    // KARTU 4: Power & Occlusion Auto-Pause Rules
+    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
+    BeginGlassCard("PowerCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_BATTERY_HALF "  POWER & OCCLUSION RULES");
 
     if (ToggleSwitch("Auto-Pause when Fullscreen App/Game is active", &cfg.pause_on_fullscreen)) {
         g_config.Save();
     }
-    if (ToggleSwitch("Auto-Pause when Window is Maximized / Desktop Covered", &cfg.pause_on_maximized)) {
+    if (ToggleSwitch("Auto-Pause when Window is Maximized", &cfg.pause_on_maximized)) {
         g_config.Save();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Automatically pauses wallpaper playback when an application (browser, code editor, etc.) is maximized and covers the desktop, reducing CPU and GPU usage to 0%.");
+        ImGui::SetTooltip("Pauses wallpaper rendering to release GPU/CPU when desktop is covered.");
     }
-    if (ToggleSwitch("Auto-Pause on Battery Power", &cfg.pause_on_battery)) {
+    if (ToggleSwitch("Auto-Pause on Battery Power (Laptops)", &cfg.pause_on_battery)) {
         g_config.Save();
     }
+    colY2 += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    // SECTION 5: Auto Smooth Looping
-    if (g_fontSemibold) ImGui::PushFont(g_fontSemibold);
-    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.97f, 1.0f), ICON_FA_ROTATE "  Auto Smooth & Seamless Looping");
-    if (g_fontSemibold) ImGui::PopFont();
-    ImGui::Spacing();
+    // KARTU 5: Auto Smooth Looping Engine
+    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
+    BeginGlassCard("LoopCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_ROTATE "  SEAMLESS LOOPING ENGINE");
 
     if (ToggleSwitch("Enable Auto Smooth Looping (Seamless Crossfade)", &cfg.auto_smooth_loop)) {
         g_config.Save();
@@ -2140,24 +2183,23 @@ static void RenderGeneralSettingsTab() {
     }
 
     if (cfg.auto_smooth_loop) {
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
         const char* loop_presets[] = {
-            "Cinematic Speed Ramp (1.2s + 0.75x Slow-Mo Blend)",
-            "Smoothstep S-Curve (0.8s Natural Easing)",
-            "Gentle Flow (1.8s Ambient Scenery Blend)",
-            "Instant Snap (0.4s Fast Seamless Snap)",
+            "Cinematic Speed Ramp (1.2s)",
+            "Smoothstep S-Curve (0.8s)",
+            "Gentle Flow (1.8s Ambient)",
+            "Instant Snap (0.4s Fast)",
             "Custom Tuning..."
         };
 
-        ImGui::SetNextItemWidth(comboW);
-        if (ImGui::Combo("Looping Preset", &cfg.loop_preset, loop_presets, IM_ARRAYSIZE(loop_presets))) {
+        ImGui::SetNextItemWidth(contentW);
+        if (ImGui::Combo("Preset", &cfg.loop_preset, loop_presets, IM_ARRAYSIZE(loop_presets))) {
             g_config.Save();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Select curated looping behavior presets optimized for different types of wallpaper animations.");
         }
 
         if (cfg.loop_preset == 4) { // Custom Tuning
-            if (StarlumeSliderFloat("Transition Duration", &cfg.smooth_loop_duration, 0.2f, 2.5f, 1, " seconds", sliderW)) {
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+            if (StarlumeSliderFloat("Transition Duration", &cfg.smooth_loop_duration, 0.2f, 2.5f, 1, "s", contentW)) {
                 g_config.Save();
             }
 
@@ -2167,36 +2209,40 @@ static void RenderGeneralSettingsTab() {
                 "Sine Wave (Smooth Harmonic)",
                 "Smootherstep (Perlin Ultra-Smooth)"
             };
-            ImGui::SetNextItemWidth(sliderW);
-            if (ImGui::Combo("Easing Curve", &cfg.loop_easing_curve, easing_curves, IM_ARRAYSIZE(easing_curves))) {
+            ImGui::SetNextItemWidth(contentW);
+            if (ImGui::Combo("Easing", &cfg.loop_easing_curve, easing_curves, IM_ARRAYSIZE(easing_curves))) {
                 g_config.Save();
             }
 
-            if (ToggleSwitch("Enable Speed Ramping (Time Warp Deceleration)", &cfg.loop_speed_ramp)) {
+            if (ToggleSwitch("Enable Speed Ramping", &cfg.loop_speed_ramp)) {
                 g_config.Save();
             }
 
             if (cfg.loop_speed_ramp) {
-                if (StarlumeSliderFloat("Min Speed at Seam", &cfg.loop_min_speed, 0.50f, 0.95f, 2, "x", sliderW)) {
+                if (StarlumeSliderFloat("Min Speed at Seam", &cfg.loop_min_speed, 0.50f, 0.95f, 2, "x", contentW)) {
                     g_config.Save();
                 }
             }
         }
     }
+    colY2 += EndGlassCard() + colGap;
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+    // KARTU 6: System Tray & Actions
+    ImGui::SetCursorScreenPos(ImVec2(rightX, colY2));
+    BeginGlassCard("TrayCard", ImVec2(colW, 0.0f), cardPadX, cardPadY);
+    GlassCardHeader(ICON_FA_CIRCLE_CHECK "  STATUS & SYSTEM TRAY");
 
-    ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), ICON_FA_CIRCLE_CHECK "  All settings are saved and applied automatically in real-time.");
-    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(0.22f, 0.91f, 1.00f, 1.00f), "Settings are saved automatically in real-time.");
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
-    if (HoloButton(ICON_FA_EYE_SLASH "  Hide Window to Tray", ImVec2(200, 0))) {
+    if (HoloButton(ICON_FA_EYE_SLASH "  Hide Window to Tray", ImVec2(contentW, 0))) {
         SettingsUI::Close();
     }
+    colY2 += EndGlassCard() + colGap;
 
-    // Ruang bawah agar konten tidak tertutup dock yg melayang
-    ImGui::Dummy(ImVec2(1.0f, 72.0f));
+    float finalH = (std::max)(colY, colY2) + 40.0f;
+    ImGui::SetCursorScreenPos(ImVec2(leftX, finalH));
+    ImGui::Dummy(ImVec2(1.0f, 1.0f));
 }
 
 static void RenderPerformancePanel() {
@@ -2649,7 +2695,7 @@ static void RenderPerformancePanel() {
     // Akhiri layout 2 kolom: lanjutkan dari kolom terpanjang
     ImGui::SetCursorScreenPos(ImVec2(pageStart.x, (std::max)(colY, colY2)));
     // Ruang bawah agar konten tidak tertutup dock yg melayang
-    ImGui::Dummy(ImVec2(1.0f, 110.0f));
+    ImGui::Dummy(ImVec2(1.0f, 40.0f));
 }
 
 static void RequestCaptureModalPreview() {
@@ -3299,8 +3345,8 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
     // Recalculate frame so WM_NCCALCSIZE strips native caption
     SetWindowPos(g_hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 
-    // DWM drop shadow & rounded corners (Windows 11)
-    MARGINS margins = { 1, 1, 1, 1 };
+    // DWM sheet-of-glass blur across entire window & rounded corners (Windows 11)
+    MARGINS margins = { -1, -1, -1, -1 };
     DwmExtendFrameIntoClientArea(g_hWnd, &margins);
 
     int corner = 2; // DWMWCP_ROUND
@@ -3310,7 +3356,7 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
     int backdrop = 3; // DWMSBT_TRANSIENTWINDOW (Acrylic)
     DwmSetWindowAttribute(g_hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &backdrop, sizeof(backdrop));
 
-    // Fallback Windows 10 Acrylic/Blur via SetWindowCompositionAttribute
+    // Fallback Windows 10 Acrylic/Blur via SetWindowCompositionAttribute (50% alpha blur)
     typedef enum {
         ACCENT_DISABLED = 0,
         ACCENT_ENABLE_GRADIENT = 1,
@@ -3333,7 +3379,7 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
     typedef BOOL(WINAPI* pfnSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
     if (HMODULE hUser = GetModuleHandleW(L"user32.dll")) {
         if (auto setAttr = (pfnSetWindowCompositionAttribute)GetProcAddress(hUser, "SetWindowCompositionAttribute")) {
-            ACCENT_POLICY policy = { ACCENT_ENABLE_ACRYLICBLURBEHIND, 2, 0x99101826, 0 };
+            ACCENT_POLICY policy = { ACCENT_ENABLE_ACRYLICBLURBEHIND, 2, 0x80101826, 0 };
             WINCOMPATTRDATA data = { 19 /* WCA_ACCENT_POLICY */, &policy, sizeof(policy) };
             setAttr(g_hWnd, &data);
         }
@@ -3428,7 +3474,7 @@ static void RenderCustomTitleBar(float winWidth, float titleBarH) {
     // 1. Sleek glass header background strip
     ImVec2 b0 = origin;
     ImVec2 b1 = ImVec2(origin.x + winWidth, origin.y + titleBarH);
-    dl->AddRectFilled(b0, b1, IM_COL32(11, 15, 26, 210));
+    dl->AddRectFilled(b0, b1, IM_COL32(11, 15, 26, 128));
     dl->AddLine(ImVec2(b0.x, b1.y - 0.5f), ImVec2(b1.x, b1.y - 0.5f), IM_COL32(56, 232, 255, 38), 1.0f);
 
     // 2. Left brand: App Icon + Name + Version Badge
@@ -3584,7 +3630,7 @@ void SettingsUI::RenderFrame() {
     ImVec2 pageAvail = ImGui::GetContentRegionAvail();
     float pageH = pageAvail.y - 2.0f;
     if (pageH < 200.0f) pageH = pageAvail.y > 0 ? pageAvail.y : 200.0f;
-    ImGuiWindowFlags pageFlags = (g_activePage == 0) ? (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse) : ImGuiWindowFlags_AlwaysVerticalScrollbar;
+    ImGuiWindowFlags pageFlags = (g_activePage == 0) ? (ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse) : 0;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f, 16.0f));
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
     ImGui::BeginChild("PageHost", ImVec2(0, pageH), false, pageFlags);
@@ -3639,7 +3685,7 @@ void SettingsUI::RenderFrame() {
     ImGui::End();
 
     ImGui::Render();
-    const float clearColor[4] = { 0.032f, 0.045f, 0.078f, 0.72f };
+    const float clearColor[4] = { 0.032f, 0.045f, 0.078f, 0.50f };
     g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
     g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clearColor);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -3700,6 +3746,96 @@ void SettingsUI::SetActivePage(int page) {
 
 int SettingsUI::GetActivePage() {
     return g_activePage;
+}
+
+bool SettingsUI::SaveScreenshot(const std::string& path) {
+    if (!g_pd3dDevice || !g_pd3dDeviceContext || !g_pSwapChain) return false;
+
+    ComPtr<ID3D11Texture2D> backBuffer;
+    if (FAILED(g_pSwapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer)))) return false;
+
+    D3D11_TEXTURE2D_DESC desc;
+    backBuffer->GetDesc(&desc);
+
+    desc.BindFlags = 0;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    desc.Usage = D3D11_USAGE_STAGING;
+    desc.MiscFlags = 0;
+
+    ComPtr<ID3D11Texture2D> stagingTex;
+    if (FAILED(g_pd3dDevice->CreateTexture2D(&desc, nullptr, &stagingTex))) return false;
+
+    g_pd3dDeviceContext->CopyResource(stagingTex.Get(), backBuffer.Get());
+
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pd3dDeviceContext->Map(stagingTex.Get(), 0, D3D11_MAP_READ, 0, &mapped))) return false;
+
+    // Convert UTF-8 path to wide path without embedded null terminator
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0);
+    std::wstring wpath;
+    if (wlen > 1) {
+        wpath.resize(wlen - 1);
+        MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, &wpath[0], wlen);
+    }
+
+    // Copy row-by-row converting DXGI BGRA staging texture to RGBA with solid alpha (255)
+    // so image viewers render glass elements clearly with accurate colors
+    std::vector<uint8_t> pixelData(desc.Width * desc.Height * 4);
+    const uint8_t* srcRow = static_cast<const uint8_t*>(mapped.pData);
+    for (UINT y = 0; y < desc.Height; ++y) {
+        const uint8_t* src = srcRow + y * mapped.RowPitch;
+        uint8_t* dst = pixelData.data() + y * desc.Width * 4;
+        for (UINT x = 0; x < desc.Width; ++x) {
+            dst[x * 4 + 0] = src[x * 4 + 2]; // Red
+            dst[x * 4 + 1] = src[x * 4 + 1]; // Green
+            dst[x * 4 + 2] = src[x * 4 + 0]; // Blue
+            dst[x * 4 + 3] = 255;             // Solid Alpha
+        }
+    }
+
+    HRESULT hrCo = CoInitialize(nullptr);
+
+    bool ok = false;
+    ComPtr<IWICImagingFactory> factory;
+    HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
+    if (SUCCEEDED(hr)) {
+        ComPtr<IWICBitmapEncoder> encoder;
+        hr = factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder);
+        if (SUCCEEDED(hr)) {
+            ComPtr<IWICStream> stream;
+            hr = factory->CreateStream(&stream);
+            if (SUCCEEDED(hr)) {
+                hr = stream->InitializeFromFilename(wpath.c_str(), GENERIC_WRITE);
+                if (SUCCEEDED(hr)) {
+                    hr = encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache);
+                    if (SUCCEEDED(hr)) {
+                        ComPtr<IWICBitmapFrameEncode> frame;
+                        hr = encoder->CreateNewFrame(&frame, nullptr);
+                        if (SUCCEEDED(hr)) {
+                            hr = frame->Initialize(nullptr);
+                            if (SUCCEEDED(hr)) {
+                                frame->SetSize(desc.Width, desc.Height);
+                                WICPixelFormatGUID pixelFormat = GUID_WICPixelFormat32bppRGBA;
+                                frame->SetPixelFormat(&pixelFormat);
+                                UINT stride = desc.Width * 4;
+                                UINT totalBytes = stride * desc.Height;
+                                hr = frame->WritePixels(desc.Height, stride, totalBytes, pixelData.data());
+                                if (SUCCEEDED(hr)) {
+                                    if (SUCCEEDED(frame->Commit()) && SUCCEEDED(encoder->Commit())) {
+                                        ok = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    g_pd3dDeviceContext->Unmap(stagingTex.Get(), 0);
+    if (SUCCEEDED(hrCo)) CoUninitialize();
+    return ok;
 }
 
 } // namespace miniwp
