@@ -86,14 +86,73 @@ MiniWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** fro
 
 ---
 
-## 🚀 Getting Started
+## 🚀 How to Use
 
-### Portable Version (No Installation Required)
-1. Download the latest `MiniWallpaper-Portable.zip` from [Releases](https://github.com/f4rdani/LiteWallpaper/releases).
-2. Extract the archive to any folder of your choice.
-3. Run `MiniWallpaper.exe`.
-4. Drag & drop any video into the **Wallpaper Gallery**, click **Play**, and enjoy!
-5. Close (or minimize) the Control Panel to send MiniWallpaper to the system tray — the full UI stack is released and the wallpaper keeps playing at only `~6-10 MB RAM`.
+> 🇬🇧 **English** · 🇮🇩 [**Bahasa Indonesia**](#-cara-pakai)
+
+### Step 1 — Download & extract
+1. Download the latest portable zip (`MiniWallpaper-Portable-…-win64.zip`) from the [**Releases page**](https://github.com/f4rdani/LiteWallpaper/releases/latest).
+2. Extract the **whole zip** into any folder you like (e.g. `D:\MiniWallpaper\`).
+   > ⚠️ Keep all files together — `MiniWallpaper.exe` needs the DLL files and the `assets` folder sitting next to it. Don't move the exe out on its own.
+
+### Step 2 — First launch
+3. Run **`MiniWallpaper.exe`**. A tray icon appears next to the clock — the app is now running.
+4. If Windows SmartScreen shows *"Windows protected your PC"* (the app is not code-signed yet), click **More info → Run anyway**.
+   > ✅ No installer, no extra downloads — everything the app needs (including the VC++ runtime DLLs) ships inside the zip.
+
+### Step 3 — Add & play a wallpaper
+5. **Left-click the tray icon** to open the Control Panel. *(Tip: running `MiniWallpaper.exe` again also opens the panel of the running instance — it never starts a second copy.)*
+6. In the **Wallpaper Gallery**, **drag & drop** any video (MP4 / WebM / MKV / AVI / MOV) onto the window — or click the **`+`** button to browse for one. Then press **▶ Play**.
+7. *(Optional)* For a heavy 4K video, click the one-click **GPU Optimizer** on its card — it converts the video into a lightweight 1080p stream (saves up to ~75% GPU load).
+
+### Step 4 — Everyday use
+- **Close (or minimize) the Control Panel** → it returns to the tray and releases the whole UI stack — the wallpaper keeps playing at only **6–10 MB RAM**.
+- **Right-click the tray icon** for the quick menu: `Control Panel` · `Play / Pause` · `Mute / Unmute` · `Change Wallpaper...` · `Exit`.
+- **Gaming?** Nothing to configure — MiniWallpaper auto-pauses with a fullscreen game/app and resumes when you return to the desktop.
+- **Start with Windows:** Control Panel → **Settings → "Startup & System Tray"** → toggle **"Start MiniWallpaper on Windows Boot"** (off by default).
+- **Screensaver (optional):** right-click `MiniWallpaper.scr` → **Install** (or copy it to `C:\Windows\System32`), then pick **MiniWallpaper** in the Windows screen-saver settings.
+
+### Step 5 — Troubleshooting
+- **SmartScreen warning** → expected for an unsigned open-source app: click **More info → Run anyway**.
+- **Antivirus flags it (false positive)** → verify the file on [VirusTotal](https://www.virustotal.com) or build it yourself from source (everything is in this repo).
+- **Uninstall** → disable "Start MiniWallpaper on Windows Boot" in the panel, then simply delete the folder (optionally also remove `%APPDATA%\MiniWallpaper`).
+
+**Requirements:** Windows 7 SP1 / 8 / 10 / 11 (64-bit) · no internet connection needed after download.
+
+---
+
+## 🇮🇩 Cara Pakai
+
+> 🇬🇧 [**English**](#-how-to-use) · 🇮🇩 **Bahasa Indonesia**
+
+### Langkah 1 — Unduh & extract
+1. Unduh zip portable terbaru (`MiniWallpaper-Portable-…-win64.zip`) dari [**halaman Releases**](https://github.com/f4rdani/LiteWallpaper/releases/latest).
+2. Extract **seluruh isi zip** ke folder mana saja (contoh: `D:\MiniWallpaper\`).
+   > ⚠️ Biarkan semua file tetap satu folder — `MiniWallpaper.exe` butuh file DLL dan folder `assets` di sebelahnya. Jangan pindahkan exe-nya sendirian.
+
+### Langkah 2 — Jalankan pertama kali
+3. Jalankan **`MiniWallpaper.exe`**. Ikon muncul di system tray (dekat jam) — aplikasi sudah berjalan.
+4. Kalau muncul peringatan SmartScreen *"Windows protected your PC"* (wajar — exe belum code-signed), klik **More info → Run anyway**.
+   > ✅ Tanpa installer, tanpa install tambahan — semua kebutuhan aplikasi (termasuk DLL VC++ Runtime) sudah dibundel di dalam zip.
+
+### Langkah 3 — Pasang & mainkan wallpaper
+5. **Klik kiri ikon tray** untuk membuka Control Panel. *(Tips: menjalankan `MiniWallpaper.exe` lagi juga membuka panel milik instance yang sedang jalan — tidak akan dobel.)*
+6. Di **Wallpaper Gallery**, **drag & drop** video apa pun (MP4 / WebM / MKV / AVI / MOV) ke jendela — atau klik tombol **`+`** untuk memilih file. Lalu tekan **▶ Play**.
+7. *(Opsional)* Untuk video 4K yang berat, klik **GPU Optimizer** sekali-klik di kartunya — video dikonversi jadi stream 1080p ringan (hemat beban GPU sampai ~75%).
+
+### Langkah 4 — Pemakaian sehari-hari
+- **Tutup (atau minimize) Control Panel** → kembali ke tray dan seluruh UI dilepas dari memori — wallpaper tetap jalan hanya dengan **6–10 MB RAM**.
+- **Klik kanan ikon tray** untuk menu cepat: `Control Panel` · `Play / Pause` · `Mute / Unmute` · `Change Wallpaper...` · `Exit`.
+- **Mau main game?** Tidak perlu setting apa pun — MiniWallpaper auto-pause saat game/aplikasi fullscreen aktif dan lanjut sendiri saat kamu kembali ke desktop.
+- **Nyala otomatis saat Windows boot:** Control Panel → **Settings → "Startup & System Tray"** → aktifkan toggle **"Start MiniWallpaper on Windows Boot"** (default: mati).
+- **Screensaver (opsional):** klik kanan `MiniWallpaper.scr` → **Install** (atau copy ke `C:\Windows\System32`), lalu pilih **MiniWallpaper** di pengaturan screen saver Windows.
+
+### Langkah 5 — Kalau ada masalah
+- **Peringatan SmartScreen** → memang begitu untuk aplikasi open-source yang belum ditandatangani: klik **More info → Run anyway**.
+- **Antivirus menandai (false positive)** → verifikasi file-nya di [VirusTotal](https://www.virustotal.com) atau build sendiri dari source (semuanya ada di repo ini).
+- **Uninstall** → matikan dulu "Start MiniWallpaper on Windows Boot" di panel, lalu hapus foldernya (opsional: hapus juga `%APPDATA%\MiniWallpaper`).
+
+**Kebutuhan:** Windows 7 SP1 / 8 / 10 / 11 (64-bit) · tidak butuh koneksi internet setelah diunduh.
 
 ---
 
