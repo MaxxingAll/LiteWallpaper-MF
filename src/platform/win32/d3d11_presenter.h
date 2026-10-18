@@ -54,6 +54,13 @@ public:
     // Query live dedicated/shared video memory used by this process on the active adapter (in MB)
     size_t GetVramUsageMB() const;
 
+    // Active adapter details
+    std::string GetAdapterName() const { return m_adapter_name; }
+    std::string GetAdapterType() const { return m_adapter_type; }
+    bool IsSoftwareMode() const { return m_is_software_mode; }
+    size_t GetAdapterDedicatedVramMB() const { return m_adapter_dedicated_mb; }
+    size_t GetAdapterSharedVramMB() const { return m_adapter_shared_mb; }
+
     // Diagnostic: clear the swap chain to a solid color and present once.
     void ClearAndPresent(float r, float g, float b);
     
@@ -106,6 +113,12 @@ private:
     HWND m_hwnd = nullptr;
     int m_width = 0;
     int m_height = 0;
+
+    std::string m_adapter_name = "Default GPU";
+    std::string m_adapter_type = "DirectX 11";
+    bool        m_is_software_mode = false;
+    size_t      m_adapter_dedicated_mb = 0;
+    size_t      m_adapter_shared_mb = 0;
     
     bool CreateShaders();
     bool CreateSwapChain(HWND hwnd, int width, int height);

@@ -826,6 +826,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
         return 1;
     }
     g_shared_engine_state.active_gpu_index.store(cfg.gpu_device_index);
+    g_shared_engine_state.SetActiveGpuInfo(g_presenter.GetAdapterName(), g_presenter.GetAdapterType());
     Logger::Info("Presenter init OK (gpu_index=", cfg.gpu_device_index, "), swapchain size=", vw, "x", vh);
 
     g_flash_until_us = 0;
@@ -988,11 +989,20 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
             last_state_update_us = now_us;
             std::string cur_vid = (!cfg.wallpapers.empty()) ? cfg.wallpapers[0].video_path : "";
             auto info = g_decoder.GetInfo();
-            size_t ram = GetProcessMemoryUsageMB();
+            PROCESS_MEMORY_COUNTERS_EX pmc = {};
+            size_t ram = 0;
+            size_t ram_priv = 0;
+            if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc))) {
+                ram = pmc.WorkingSetSize / (1024 * 1024);
+                ram_priv = pmc.PrivateUsage / (1024 * 1024);
+            }
             double cpu = GetProcessCpuUsagePercent();
             size_t vram = g_presenter.GetVramUsageMB();
-            if (vram == 0 && g_decoder_hw) {
+            if (vram == 0 && g_decoder_hw && !g_presenter.IsSoftwareMode()) {
                 vram = GetProcessVramUsageMB(info.width, info.height, vw, vh, g_decoder_hw);
+            }
+            if (g_presenter.IsSoftwareMode()) {
+                vram = 0;
             }
 
             g_shared_engine_state.connected.store(true);
@@ -1006,6 +1016,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
             g_shared_engine_state.height.store(info.height);
             g_shared_engine_state.duration.store(info.duration_seconds);
             g_shared_engine_state.ram_mb.store(ram);
+            g_shared_engine_state.ram_private_mb.store(ram_priv);
             g_shared_engine_state.vram_mb.store(vram);
             g_shared_engine_state.cpu_percent.store(cpu);
             g_shared_engine_state.system_ram_percent.store(g_governor.GetSystemRamPercent());
@@ -1017,6 +1028,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
             g_shared_engine_state.SetCurrentVideo(cur_vid);
             g_shared_engine_state.SetCodec(info.codec_name);
             g_shared_engine_state.SetLastError(g_last_error);
+            g_shared_engine_state.SetActiveGpuInfo(g_presenter.GetAdapterName(), g_presenter.GetAdapterType());
         }
 
         // Periodic process working set memory trimming every 30 seconds during active playback
@@ -1578,7 +1590,13 @@ std::string OnIpcRequest(const std::string& request_json) {
         }
         return "{\"ok\":true}";
     } else if (cmd == "get_status") {
-        size_t ram = GetProcessMemoryUsageMB();
+        PROCESS_MEMORY_COUNTERS_EX pmc = {};
+        size_t ram = 0;
+        size_t ram_priv = 0;
+        if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc))) {
+            ram = pmc.WorkingSetSize / (1024 * 1024);
+            ram_priv = pmc.PrivateUsage / (1024 * 1024);
+        }
         std::lock_guard<std::mutex> lock(g_decoder_mutex);
         auto info = g_decoder.GetInfo();
         auto& cfg = g_config.Get();
@@ -1603,6 +1621,11 @@ std::string OnIpcRequest(const std::string& request_json) {
             {"lockscreen_timestamp", cfg.lockscreen_timestamp},
             {"codec", info.codec_name},
             {"ram_mb", ram},
+            {"ram_private_mb", ram_priv},
+            {"vram_mb", g_shared_engine_state.vram_mb.load()},
+            {"cpu_percent", g_shared_engine_state.cpu_percent.load()},
+            {"active_gpu_name", g_shared_engine_state.GetActiveGpuName()},
+            {"active_gpu_type", g_shared_engine_state.GetActiveGpuType()},
             {"injected", g_inject_ok},
             {"hw_decode", g_decoder_hw},
             {"system_ram_pct", g_governor.GetSystemRamPercent()},
@@ -1691,6 +1714,8 @@ std::string OnIpcRequest(const std::string& request_json) {
             }
             g_shared_engine_state.active_gpu_index.store(gpu_idx);
             g_shared_engine_state.hw_decode.store(g_decoder_hw);
+            g_shared_engine_state.SetActiveGpuInfo(g_presenter.GetAdapterName(), g_presenter.GetAdapterType());
+            g_shared_engine_state.vram_mb.store(g_presenter.GetVramUsageMB());
         }
         return "{\"ok\":true}";
     } else if (cmd == "set_target_displays") {

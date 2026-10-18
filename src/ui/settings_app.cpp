@@ -5,9 +5,13 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
+#if __has_include(<dxgi1_4.h>)
+#include <dxgi1_4.h>
+#endif
 #include <wrl/client.h>
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <psapi.h>
 #include <commdlg.h>
 #include <oleidl.h>
 #include <wincodec.h>
@@ -74,11 +78,14 @@ static double g_daemonDuration = 0.0;
 static double g_daemonCurrentTimeSec = 0.0;
 static std::string g_daemonCodec = "";
 static size_t g_daemonRamMB = 0;
+static size_t g_daemonRamPrivateMB = 0;
 static size_t g_daemonVramMB = 0;
 static double g_daemonCpuPercent = 0.0;
 static bool   g_daemonInjected = false;
 static bool   g_daemonHwDecode = false;
 static int    g_daemonActiveGpuIndex = 0;
+static std::string g_daemonGpuName = "";
+static std::string g_daemonGpuType = "";
 static uint64_t g_daemonFramesRendered = 0;
 static std::string g_daemonLastError = "";
 
@@ -480,13 +487,25 @@ static void FetchDaemonStatus() {
     g_daemonCurrentTimeSec = g_shared_engine_state.current_time_sec.load();
     g_daemonCodec = g_shared_engine_state.GetCodec();
     g_daemonRamMB = g_shared_engine_state.ram_mb.load();
+    g_daemonRamPrivateMB = g_shared_engine_state.ram_private_mb.load();
     g_daemonVramMB = g_shared_engine_state.vram_mb.load();
     g_daemonCpuPercent = g_shared_engine_state.cpu_percent.load();
     g_daemonInjected = g_shared_engine_state.injected.load();
     g_daemonHwDecode = g_shared_engine_state.hw_decode.load();
     g_daemonActiveGpuIndex = g_shared_engine_state.active_gpu_index.load();
+    g_daemonGpuName = g_shared_engine_state.GetActiveGpuName();
+    g_daemonGpuType = g_shared_engine_state.GetActiveGpuType();
     g_daemonFramesRendered = g_shared_engine_state.frames_rendered.load();
     g_daemonLastError = g_shared_engine_state.GetLastError();
+
+    // Fallback if engine loop has not ticked: measure process memory directly
+    if (g_daemonRamMB == 0) {
+        PROCESS_MEMORY_COUNTERS_EX pmc = {};
+        if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc))) {
+            g_daemonRamMB = pmc.WorkingSetSize / (1024 * 1024);
+            g_daemonRamPrivateMB = pmc.PrivateUsage / (1024 * 1024);
+        }
+    }
 }
 
 static void OpenCaptureModal(const std::string& video_path, int targetFilter = 0);
@@ -2344,10 +2363,111 @@ static void RenderPerformancePanel() {
     static double telemLastT = 0.0;
     static bool telemInit = false;
 
-    int cur_ram = g_shared_engine_state.system_ram_percent.load();
-    int cur_vram = g_shared_engine_state.gpu_vram_percent.load();
-    bool is_sleeping = g_shared_engine_state.resource_heavy_sleep.load();
     float curCpu = g_daemonConnected ? (float)g_daemonCpuPercent : 0.0f;
+    size_t curAppRam = g_daemonRamMB;
+    size_t curAppPriv = g_daemonRamPrivateMB;
+    size_t curAppVram = g_daemonVramMB;
+    int sys_ram_pct = g_shared_engine_state.system_ram_percent.load();
+    bool is_sleeping = g_shared_engine_state.resource_heavy_sleep.load();
+
+    // Fallback if engine loop has not ticked: measure process memory directly
+    if (curAppRam == 0) {
+        PROCESS_MEMORY_COUNTERS_EX pmc = {};
+        if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc))) {
+            curAppRam = pmc.WorkingSetSize / (1024 * 1024);
+            curAppPriv = pmc.PrivateUsage / (1024 * 1024);
+        }
+    }
+
+    // Fallback for Windows 11 system RAM load percentage
+    if (sys_ram_pct == 0) {
+        MEMORYSTATUSEX memInfo = {};
+        memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+        if (GlobalMemoryStatusEx(&memInfo)) {
+            sys_ram_pct = static_cast<int>(memInfo.dwMemoryLoad);
+        }
+    }
+
+    // Fallback CPU usage for standalone UI process
+    if (curCpu == 0.0f) {
+        static ULARGE_INTEGER lastCPU = {0}, lastSysCPU = {0}, lastUserCPU = {0};
+        static int numProcessors = -1;
+        static bool s_cpuFirst = true;
+        static float s_lastUiCpu = 0.0f;
+        if (s_cpuFirst) {
+            SYSTEM_INFO sysInfo;
+            FILETIME ftime, fsys, fuser;
+            GetSystemInfo(&sysInfo);
+            numProcessors = (int)sysInfo.dwNumberOfProcessors;
+            GetSystemTimeAsFileTime(&ftime);
+            memcpy(&lastCPU, &ftime, sizeof(FILETIME));
+            GetProcessTimes(GetCurrentProcess(), &ftime, &ftime, &fsys, &fuser);
+            memcpy(&lastSysCPU, &fsys, sizeof(FILETIME));
+            memcpy(&lastUserCPU, &fuser, sizeof(FILETIME));
+            s_cpuFirst = false;
+        } else {
+            FILETIME ftime, fsys, fuser;
+            ULARGE_INTEGER now, sys, user;
+            GetSystemTimeAsFileTime(&ftime);
+            memcpy(&now, &ftime, sizeof(FILETIME));
+            GetProcessTimes(GetCurrentProcess(), &ftime, &ftime, &fsys, &fuser);
+            memcpy(&sys, &fsys, sizeof(FILETIME));
+            memcpy(&user, &fuser, sizeof(FILETIME));
+            ULONGLONG deltaSys = sys.QuadPart - lastSysCPU.QuadPart;
+            ULONGLONG deltaUser = user.QuadPart - lastUserCPU.QuadPart;
+            ULONGLONG deltaTotal = now.QuadPart - lastCPU.QuadPart;
+            if (deltaTotal > 0 && numProcessors > 0) {
+                double pct = ((deltaSys + deltaUser) * 100.0) / (deltaTotal * numProcessors);
+                s_lastUiCpu = (float)((pct > 100.0) ? 100.0 : pct);
+            }
+            lastCPU = now;
+            lastSysCPU = sys;
+            lastUserCPU = user;
+        }
+        if (s_lastUiCpu > 0.0f) curCpu = s_lastUiCpu;
+    }
+
+    // Determine active rendering engine & GPU dynamically
+    int activeGpuIdx = (g_daemonActiveGpuIndex != 0 || cfg.gpu_device_index == -1) ? g_daemonActiveGpuIndex : cfg.gpu_device_index;
+    bool isCpuDecode = (activeGpuIdx == -1 || cfg.gpu_device_index == -1);
+
+    std::string activeGpuName = g_daemonGpuName;
+    if (isCpuDecode) {
+        activeGpuName = "CPU Software (swscale)";
+        curAppVram = 0;
+    } else if (activeGpuName.empty() || activeGpuName == "CPU (Software Decode)") {
+        if (cfg.gpu_device_index >= 0 && cfg.gpu_device_index < (int)g_hardwareInfo.gpus.size()) {
+            activeGpuName = g_hardwareInfo.gpus[cfg.gpu_device_index].name;
+        } else if (!g_hardwareInfo.gpus.empty()) {
+            activeGpuName = g_hardwareInfo.gpus[0].name;
+        } else {
+            activeGpuName = "DirectX 11 GPU";
+        }
+    }
+
+    // Query DXGI process VRAM directly if engine VRAM is not yet reported or running UI context
+    if (curAppVram == 0 && !isCpuDecode && g_pd3dDevice) {
+        ComPtr<IDXGIDevice> dxgiDevice;
+        if (SUCCEEDED(g_pd3dDevice->QueryInterface(IID_PPV_ARGS(&dxgiDevice)))) {
+            ComPtr<IDXGIAdapter> adapter;
+            if (SUCCEEDED(dxgiDevice->GetAdapter(&adapter))) {
+#if __has_include(<dxgi1_4.h>)
+                ComPtr<IDXGIAdapter3> adapter3;
+                if (SUCCEEDED(adapter.As(&adapter3))) {
+                    DXGI_QUERY_VIDEO_MEMORY_INFO memInfo = {};
+                    if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memInfo))) {
+                        size_t v_mb = static_cast<size_t>(memInfo.CurrentUsage / (1024 * 1024));
+                        if (v_mb > 0) curAppVram = v_mb;
+                    }
+                    if (curAppVram == 0 && SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &memInfo))) {
+                        size_t s_mb = static_cast<size_t>(memInfo.CurrentUsage / (1024 * 1024));
+                        if (s_mb > 0) curAppVram = s_mb;
+                    }
+                }
+#endif
+            }
+        }
+    }
 
     double nowT = ImGui::GetTime();
     if (!telemInit) {
@@ -2355,8 +2475,8 @@ static void RenderPerformancePanel() {
         telemLastT = nowT;
         for (int i = 0; i < 5; ++i) {
             telemCpu[i] = curCpu;
-            telemRam[i] = (float)cur_ram;
-            telemVram[i] = (float)cur_vram;
+            telemRam[i] = (float)curAppRam;
+            telemVram[i] = (float)curAppVram;
         }
     } else if (nowT - telemLastT >= 1.0) {
         telemLastT = nowT;
@@ -2366,86 +2486,98 @@ static void RenderPerformancePanel() {
             telemVram[i] = telemVram[i + 1];
         }
         telemCpu[4] = curCpu;
-        telemRam[4] = (float)cur_ram;
-        telemVram[4] = (float)cur_vram;
+        telemRam[4] = (float)curAppRam;
+        telemVram[4] = (float)curAppVram;
     }
 
     // ================= Baris telemetri (Variant 3: Startorch Telemetry Metric) =================
     const float tileH = 144.0f;
     float colTopY = pageStart.y;
     {
+        // 1. CPU Metric Tile (MiniWallpaper process CPU load)
         char cpuVal[32];
         char cpuSub[96];
         const char* cpuUnit = "%";
         const char* cpuStatus;
         ImU32 cpuCol;
-        if (!g_daemonConnected) {
+        if (!g_daemonConnected && curCpu <= 0.0f) {
             snprintf(cpuVal, sizeof(cpuVal), "--");
             snprintf(cpuSub, sizeof(cpuSub), "Background engine connecting...");
             cpuUnit = "";
-            cpuStatus = "OFFLINE";
+            cpuStatus = "STANDBY";
             cpuCol = ST_TEXT_MUTED;
         } else {
             snprintf(cpuVal, sizeof(cpuVal), "%.1f", (double)curCpu);
-            snprintf(cpuSub, sizeof(cpuSub), "Background engine process");
-            if (curCpu < 40.0f) { cpuStatus = "OPTIMAL"; cpuCol = ST_GREEN; }
-            else if (curCpu < 70.0f) { cpuStatus = "ELEVATED"; cpuCol = ST_GOLD; }
-            else { cpuStatus = "CRITICAL"; cpuCol = ST_RED; }
+            snprintf(cpuSub, sizeof(cpuSub), "MiniWallpaper process • Multi-thread decode");
+            if (curCpu < 4.0f) { cpuStatus = "OPTIMAL"; cpuCol = ST_GREEN; }
+            else if (curCpu < 12.0f) { cpuStatus = "ELEVATED"; cpuCol = ST_GOLD; }
+            else { cpuStatus = "HIGH"; cpuCol = ST_RED; }
         }
+        float cpuPct01 = (std::min)(1.0f, (std::max)(0.0f, curCpu / 15.0f));
 
-        int ramTrigger = cfg.pause_on_resource_heavy ? cfg.resource_ram_threshold_pct : 85;
+        // 2. RAM Metric Tile (MiniWallpaper process RAM usage in MB)
         char ramVal[32];
-        char ramSub[96];
-        snprintf(ramVal, sizeof(ramVal), "%d", cur_ram);
-        snprintf(ramSub, sizeof(ramSub), "Engine working set: %zu MB", g_daemonRamMB);
+        char ramSub[110];
+        snprintf(ramVal, sizeof(ramVal), "%zu", curAppRam);
+        if (curAppPriv > 0) {
+            snprintf(ramSub, sizeof(ramSub), "Working Set: %zu MB (Priv: %zu MB) • Sys: %d%%", curAppRam, curAppPriv, sys_ram_pct);
+        } else {
+            snprintf(ramSub, sizeof(ramSub), "Working Set: %zu MB • Windows 11 Load: %d%%", curAppRam, sys_ram_pct);
+        }
         const char* ramStatus;
         ImU32 ramCol;
-        if (cur_ram >= ramTrigger) { ramStatus = is_sleeping ? "AUTO-SLEEP" : "HIGH"; ramCol = ST_RED; }
-        else if (cur_ram >= ramTrigger - 15) { ramStatus = "ELEVATED"; ramCol = ST_GOLD; }
-        else { ramStatus = "OPTIMAL"; ramCol = ST_GREEN; }
+        if (curAppRam < 60) { ramStatus = "OPTIMAL"; ramCol = ST_GREEN; }
+        else if (curAppRam < 120) { ramStatus = "ELEVATED"; ramCol = ST_GOLD; }
+        else { ramStatus = is_sleeping ? "AUTO-SLEEP" : "HIGH"; ramCol = ST_RED; }
+        float ramPct01 = (std::min)(1.0f, (std::max)(0.0f, (float)curAppRam / 100.0f));
 
+        // 3. VRAM Metric Tile (Dynamic for NVIDIA / Intel iGPU / CPU)
         char vramVal[32];
         char vramSub[128];
-        const char* vramUnit = "%";
+        const char* vramUnit = "MB";
         float vramPct = 0.0f;
         const char* vramStatus;
         ImU32 vramCol;
-        if (cur_vram <= 0) {
-            snprintf(vramVal, sizeof(vramVal), "--");
-            vramUnit = "";
-            snprintf(vramSub, sizeof(vramSub), "No VRAM readout (software decode)");
-            vramStatus = "SOFTWARE";
+
+        if (isCpuDecode) {
+            snprintf(vramVal, sizeof(vramVal), "0");
+            snprintf(vramSub, sizeof(vramSub), "CPU swscale • 0 MB dedicated VRAM (RAM only)");
+            vramPct = 0.0f;
+            vramStatus = "CPU MODE";
             vramCol = ST_CYAN;
         } else {
-            int vramTrigger = cfg.pause_on_resource_heavy ? cfg.resource_vram_threshold_pct : 85;
-            snprintf(vramVal, sizeof(vramVal), "%d", cur_vram);
-            if (g_daemonActiveGpuIndex == -1 || !g_daemonHwDecode) {
-                snprintf(vramSub, sizeof(vramSub), "Engine video memory: %zu MB (software)", g_daemonVramMB);
+            snprintf(vramVal, sizeof(vramVal), "%zu", curAppVram);
+            if (activeGpuName.find("NVIDIA") != std::string::npos) {
+                snprintf(vramSub, sizeof(vramSub), "NVIDIA RTX • %zu MB dedicated VRAM", curAppVram);
+            } else if (activeGpuName.find("Intel") != std::string::npos) {
+                snprintf(vramSub, sizeof(vramSub), "Intel iGPU • %zu MB video memory", curAppVram);
+            } else if (activeGpuName.find("AMD") != std::string::npos || activeGpuName.find("Radeon") != std::string::npos) {
+                snprintf(vramSub, sizeof(vramSub), "AMD Radeon • %zu MB video memory", curAppVram);
             } else {
-                snprintf(vramSub, sizeof(vramSub), "Engine video memory: %zu MB (HW decode)", g_daemonVramMB);
+                snprintf(vramSub, sizeof(vramSub), "%s • %zu MB", activeGpuName.c_str(), curAppVram);
             }
-            vramPct = (float)cur_vram / 100.0f;
-            if (cur_vram >= vramTrigger) { vramStatus = is_sleeping ? "AUTO-SLEEP" : "HIGH"; vramCol = ST_RED; }
-            else if (cur_vram >= vramTrigger - 15) { vramStatus = "ELEVATED"; vramCol = ST_GOLD; }
-            else { vramStatus = "OPTIMAL"; vramCol = ST_GREEN; }
+            vramPct = (std::min)(1.0f, (std::max)(0.0f, (float)curAppVram / 80.0f));
+            if (curAppVram < 40) { vramStatus = "OPTIMAL"; vramCol = ST_GREEN; }
+            else if (curAppVram < 80) { vramStatus = "ELEVATED"; vramCol = ST_GOLD; }
+            else { vramStatus = is_sleeping ? "AUTO-SLEEP" : "HIGH"; vramCol = ST_RED; }
         }
 
         if (availW >= 640.0f) {
             const float tileGap = 14.0f;
             float tileW = (availW - tileGap * 2.0f) / 3.0f;
-            TelemetryTile("TelemCPU", "ENGINE CPU LOAD", (std::min)(1.0f, (std::max)(0.0f, curCpu / 100.0f)), cpuVal, cpuUnit, cpuStatus, cpuCol, telemCpu, cpuSub, ImVec2(tileW, tileH));
+            TelemetryTile("TelemCPU", "APP CPU LOAD", cpuPct01, cpuVal, cpuUnit, cpuStatus, cpuCol, telemCpu, cpuSub, ImVec2(tileW, tileH));
             ImGui::SetCursorScreenPos(ImVec2(pageStart.x + tileW + tileGap, pageStart.y));
-            TelemetryTile("TelemRAM", "SYSTEM RAM", (std::min)(1.0f, (std::max)(0.0f, (float)cur_ram / 100.0f)), ramVal, "%", ramStatus, ramCol, telemRam, ramSub, ImVec2(tileW, tileH));
+            TelemetryTile("TelemRAM", "APP RAM USAGE", ramPct01, ramVal, "MB", ramStatus, ramCol, telemRam, ramSub, ImVec2(tileW, tileH));
             ImGui::SetCursorScreenPos(ImVec2(pageStart.x + (tileW + tileGap) * 2.0f, pageStart.y));
-            TelemetryTile("TelemVRAM", "GPU VRAM", vramPct, vramVal, vramUnit, vramStatus, vramCol, telemVram, vramSub, ImVec2(tileW, tileH));
+            TelemetryTile("TelemVRAM", "APP VRAM USAGE", vramPct, vramVal, vramUnit, vramStatus, vramCol, telemVram, vramSub, ImVec2(tileW, tileH));
             colTopY = pageStart.y + tileH + 18.0f;
         } else {
             // Responsif layar sempit: stack 3 tile secara vertikal
-            TelemetryTile("TelemCPU", "ENGINE CPU LOAD", (std::min)(1.0f, (std::max)(0.0f, curCpu / 100.0f)), cpuVal, cpuUnit, cpuStatus, cpuCol, telemCpu, cpuSub, ImVec2(availW, tileH));
+            TelemetryTile("TelemCPU", "APP CPU LOAD", cpuPct01, cpuVal, cpuUnit, cpuStatus, cpuCol, telemCpu, cpuSub, ImVec2(availW, tileH));
             ImGui::Dummy(ImVec2(0.0f, 10.0f));
-            TelemetryTile("TelemRAM", "SYSTEM RAM", (std::min)(1.0f, (std::max)(0.0f, (float)cur_ram / 100.0f)), ramVal, "%", ramStatus, ramCol, telemRam, ramSub, ImVec2(availW, tileH));
+            TelemetryTile("TelemRAM", "APP RAM USAGE", ramPct01, ramVal, "MB", ramStatus, ramCol, telemRam, ramSub, ImVec2(availW, tileH));
             ImGui::Dummy(ImVec2(0.0f, 10.0f));
-            TelemetryTile("TelemVRAM", "GPU VRAM", vramPct, vramVal, vramUnit, vramStatus, vramCol, telemVram, vramSub, ImVec2(availW, tileH));
+            TelemetryTile("TelemVRAM", "APP VRAM USAGE", vramPct, vramVal, vramUnit, vramStatus, vramCol, telemVram, vramSub, ImVec2(availW, tileH));
             colTopY = ImGui::GetCursorScreenPos().y + 14.0f;
         }
     }
@@ -2507,6 +2639,23 @@ static void RenderPerformancePanel() {
         g_config.Save();
         nlohmann::json req{{"cmd", "set_render_device"}, {"gpu_index", cfg.gpu_device_index}};
         SendIpcAsync(req.dump());
+
+        // Dynamic and instant reflection in UI telemetry
+        if (cfg.gpu_device_index == -1) {
+            g_daemonActiveGpuIndex = -1;
+            g_daemonGpuName = "CPU Software (swscale)";
+            g_daemonGpuType = "CPU Software";
+            g_daemonVramMB = 0;
+            g_shared_engine_state.vram_mb.store(0);
+            g_shared_engine_state.active_gpu_index.store(-1);
+            g_shared_engine_state.SetActiveGpuInfo("CPU Software", "CPU Software");
+        } else if (cfg.gpu_device_index >= 0 && cfg.gpu_device_index < (int)g_hardwareInfo.gpus.size()) {
+            g_daemonActiveGpuIndex = cfg.gpu_device_index;
+            g_daemonGpuName = g_hardwareInfo.gpus[cfg.gpu_device_index].name;
+            g_daemonGpuType = g_hardwareInfo.gpus[cfg.gpu_device_index].is_discrete ? "Dedicated GPU" : "Integrated GPU";
+            g_shared_engine_state.active_gpu_index.store(cfg.gpu_device_index);
+            g_shared_engine_state.SetActiveGpuInfo(g_daemonGpuName, g_daemonGpuType);
+        }
     }
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(8);
@@ -2562,6 +2711,25 @@ static void RenderPerformancePanel() {
             ImGui::SetTooltip("Triggers auto-sleep when GPU dedicated video memory usage hits this percentage (default 80%).");
         }
 
+        int cur_ram = sys_ram_pct;
+        int cur_vram = g_shared_engine_state.gpu_vram_percent.load();
+        if (cur_vram == 0 && !isCpuDecode && g_pd3dDevice) {
+            ComPtr<IDXGIDevice> dxgiDev;
+            if (SUCCEEDED(g_pd3dDevice->QueryInterface(IID_PPV_ARGS(&dxgiDev)))) {
+                ComPtr<IDXGIAdapter> ad;
+                if (SUCCEEDED(dxgiDev->GetAdapter(&ad))) {
+#if __has_include(<dxgi1_4.h>)
+                    ComPtr<IDXGIAdapter3> ad3;
+                    if (SUCCEEDED(ad.As(&ad3))) {
+                        DXGI_QUERY_VIDEO_MEMORY_INFO qInfo = {};
+                        if (SUCCEEDED(ad3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &qInfo)) && qInfo.Budget > 0) {
+                            cur_vram = static_cast<int>((double)qInfo.CurrentUsage * 100.0 / (double)qInfo.Budget);
+                        }
+                    }
+#endif
+                }
+            }
+        }
         bool ram_high = (cur_ram >= cfg.resource_ram_threshold_pct);
         bool vram_high = (cur_vram >= cfg.resource_vram_threshold_pct);
 
@@ -2570,13 +2738,13 @@ static void RenderPerformancePanel() {
         snprintf(vram_buf, sizeof(vram_buf), "%d%%  (limit %d%%)", cur_vram, cfg.resource_vram_threshold_pct);
 
         ImGui::Dummy(ImVec2(0.0f, 14.0f));
-        StarlumeBar("System RAM Usage", cur_ram / 100.0f, ram_buf, ram_high ? ST_RED : ST_GOLD,
-                    ram_high ? ST_RED : ST_PINK_SOFT, cfg.resource_ram_threshold_pct / 100.0f);
+        StarlumeBar("System RAM Usage", (float)cur_ram / 100.0f, ram_buf, ram_high ? ST_RED : ST_GOLD,
+                    ram_high ? ST_RED : ST_PINK_SOFT, (float)cfg.resource_ram_threshold_pct / 100.0f);
 
         ImGui::Dummy(ImVec2(0.0f, 8.0f));
         if (cur_vram > 0) {
-            StarlumeBar("GPU VRAM Usage", cur_vram / 100.0f, vram_buf, vram_high ? ST_RED : ST_GOLD,
-                        vram_high ? ST_RED : ST_PINK_SOFT, cfg.resource_vram_threshold_pct / 100.0f);
+            StarlumeBar("GPU VRAM Usage", (float)cur_vram / 100.0f, vram_buf, vram_high ? ST_RED : ST_GOLD,
+                        vram_high ? ST_RED : ST_PINK_SOFT, (float)cfg.resource_vram_threshold_pct / 100.0f);
         } else {
             TextDim("GPU VRAM readout unavailable (software decode).");
         }

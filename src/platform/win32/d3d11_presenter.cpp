@@ -13,6 +13,14 @@ struct ScalingData {
     float _pad[2];
 };
 
+static std::string WideToUtf8Presenter(const std::wstring& wstr) {
+    if (wstr.empty()) return std::string();
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), NULL, 0, NULL, NULL);
+    std::string str(size_needed, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &str[0], size_needed, NULL, NULL);
+    return str;
+}
+
 static const char* g_vs_source = R"(
 cbuffer ScalingBuffer : register(b0) {
     float2 uv_scale;
@@ -93,6 +101,16 @@ bool D3D11Presenter::Init(HWND hwnd, int width, int height, int gpu_index) {
     m_hwnd = hwnd;
     m_width = width;
     m_height = height;
+
+    if (gpu_index == -1) {
+        m_is_software_mode = true;
+        m_adapter_name = "CPU: Software Processor Decode (swscale)";
+        m_adapter_type = "CPU Software";
+        m_adapter_dedicated_mb = 0;
+        m_adapter_shared_mb = 0;
+    } else {
+        m_is_software_mode = false;
+    }
 
     D3D_FEATURE_LEVEL featureLevels[] = {
         D3D_FEATURE_LEVEL_11_0,
@@ -202,6 +220,38 @@ bool D3D11Presenter::Init(HWND hwnd, int width, int height, int gpu_index) {
 
     if (FAILED(hr)) {
         return false;
+    }
+
+    // Query and cache active adapter details
+    {
+        ComPtr<IDXGIDevice> dxgiDev;
+        if (SUCCEEDED(m_device.As(&dxgiDev))) {
+            ComPtr<IDXGIAdapter> adapter;
+            if (SUCCEEDED(dxgiDev->GetAdapter(&adapter))) {
+                DXGI_ADAPTER_DESC desc = {};
+                if (SUCCEEDED(adapter->GetDesc(&desc))) {
+                    if (m_is_software_mode) {
+                        m_adapter_name = "CPU: Software Processor Decode (swscale)";
+                        m_adapter_type = "CPU Software";
+                        m_adapter_dedicated_mb = 0;
+                        m_adapter_shared_mb = 0;
+                    } else {
+                        m_adapter_name = WideToUtf8Presenter(desc.Description);
+                        m_adapter_dedicated_mb = desc.DedicatedVideoMemory / (1024 * 1024);
+                        m_adapter_shared_mb = desc.SharedSystemMemory / (1024 * 1024);
+                        if (desc.VendorId == 0x10DE) {
+                            m_adapter_type = "NVIDIA Dedicated";
+                        } else if (desc.VendorId == 0x8086) {
+                            m_adapter_type = (m_adapter_dedicated_mb > 2048) ? "Intel Arc Dedicated" : "Intel iGPU";
+                        } else if (desc.VendorId == 0x1002) {
+                            m_adapter_type = (m_adapter_dedicated_mb > 512) ? "AMD Radeon Dedicated" : "AMD Radeon iGPU";
+                        } else {
+                            m_adapter_type = (m_adapter_dedicated_mb > 1024) ? "Dedicated GPU" : "Integrated GPU";
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Enable multithreaded protection for safe concurrent video decodes/presents
@@ -606,6 +656,9 @@ ID3D11DeviceContext* D3D11Presenter::GetContext() const {
 }
 
 size_t D3D11Presenter::GetVramUsageMB() const {
+    if (m_is_software_mode) {
+        return 0; // Pure CPU decoding consumes 0 MB dedicated video memory
+    }
     if (!m_device) return 0;
     
     ComPtr<IDXGIDevice> dxgiDevice;
@@ -631,13 +684,6 @@ size_t D3D11Presenter::GetVramUsageMB() const {
     return 0;
 }
 
-static std::string WideToUtf8Presenter(const std::wstring& wstr) {
-    if (wstr.empty()) return std::string();
-    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), NULL, 0, NULL, NULL);
-    std::string str(size_needed, 0);
-    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &str[0], size_needed, NULL, NULL);
-    return str;
-}
 
 bool D3D11Presenter::CaptureBackBufferRGB(std::vector<uint8_t>& outRgb, int& outWidth, int& outHeight) {
     if (!m_swapchain || !m_device || !m_context) return false;

@@ -20,6 +20,7 @@ struct EngineState {
     std::atomic<double>   duration{0.0};
     std::atomic<double>   current_time_sec{0.0};
     std::atomic<size_t>   ram_mb{0};
+    std::atomic<size_t>   ram_private_mb{0};
     std::atomic<size_t>   vram_mb{0};
     std::atomic<double>   cpu_percent{0.0};
     std::atomic<uint64_t> frames_rendered{0};
@@ -36,6 +37,7 @@ struct EngineState {
     char codec[64] = {};
     char last_error[256] = {};
     char active_renderer_name[128] = {};
+    char active_gpu_type[64] = {};
 
     void SetCurrentVideo(const std::string& path) {
         std::lock_guard<std::mutex> lock(str_mutex);
@@ -53,6 +55,11 @@ struct EngineState {
         std::lock_guard<std::mutex> lock(str_mutex);
         strncpy_s(active_renderer_name, sizeof(active_renderer_name), name.c_str(), _TRUNCATE);
     }
+    void SetActiveGpuInfo(const std::string& name, const std::string& type) {
+        std::lock_guard<std::mutex> lock(str_mutex);
+        strncpy_s(active_renderer_name, sizeof(active_renderer_name), name.c_str(), _TRUNCATE);
+        strncpy_s(active_gpu_type, sizeof(active_gpu_type), type.c_str(), _TRUNCATE);
+    }
     std::string GetCurrentVideo() const {
         std::lock_guard<std::mutex> lock(str_mutex);
         return std::string(current_video);
@@ -68,6 +75,14 @@ struct EngineState {
     std::string GetActiveRendererName() const {
         std::lock_guard<std::mutex> lock(str_mutex);
         return std::string(active_renderer_name);
+    }
+    std::string GetActiveGpuName() const {
+        std::lock_guard<std::mutex> lock(str_mutex);
+        return std::string(active_renderer_name);
+    }
+    std::string GetActiveGpuType() const {
+        std::lock_guard<std::mutex> lock(str_mutex);
+        return std::string(active_gpu_type);
     }
 };
 
