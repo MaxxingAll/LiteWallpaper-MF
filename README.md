@@ -28,7 +28,7 @@ MiniWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** fro
 
 | Operational Metric | 🚀 **MiniWallpaper (v2.0.0)** | State / Verification Details |
 | :--- | :---: | :--- |
-| **RAM (Task Manager "Memory")** | **`6 MB - 10 MB`** | 1080p 60 FPS hardware playback, adaptive working-set trim (median 8.3 MB) |
+| **RAM (Task Manager "Memory")** | **`6 MB - 10 MB`** | 1920×1080 @ 60 fps hardware playback, adaptive working-set trim (median 8.3 MB) — scales with the resolution of the video you pick |
 | **RAM (Deep Suspend / Idle)** | **`< 1.0 MB`** | Decoder fully released + automatic working-set trim |
 | **CPU Usage** | **`0.0% - 1.0%`** (avg `~0.3%`) | Decoded entirely on GPU hardware ASIC (NVDEC / Intel QSV) |
 | **Dedicated VRAM** | **`~50 MB - 61 MB`** | Optimized 4–6 surface pool (drops to 0 MB on pause) |
@@ -37,6 +37,8 @@ MiniWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** fro
 | **Process Architecture** | **Native C++20 / Direct3D 11** | Zero external runtime dependencies, pure Win32 |
 
 > Verified on the live daemon (1920×1080 @ 60 fps hardware decode, October 2026). *Memory* = Task Manager's private working set: **5.4–10 MB while playing** with the adaptive working-set trim (median 8.3 MB; brief <1 s warm-up spikes), **< 1 MB in deep sleep**, ~5 MB in deep sleep with the control panel open.
+
+> 📐 **Resolution matters:** every number above is measured with a **1080p (1920×1080)** wallpaper. RAM, VRAM and GPU load scale with the **resolution and FPS of the video you choose** — a 4K source decodes ~4× the pixels. That is exactly why the built-in one-click **GPU Optimizer (4K → 1080p)** exists: it brings heavy videos down into the footprint above.
 
 ### 📸 Real-World Telemetry
 
