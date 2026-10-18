@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src="assets/logo.jpg" alt="MiniWallpaper Logo" width="140" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0, 200, 255, 0.2);" />
+  <img src="assets/miniwallpaper-logo.png" alt="MiniWallpaper Logo" width="140" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0, 200, 255, 0.25);" />
 
   # MiniWallpaper
 
@@ -50,6 +50,22 @@ MiniWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** fro
 
 <div align="center">
   <img src="assets/screenshots/resource_telemetry.png" alt="Resource Telemetry" width="680" />
+</div>
+
+### 🖥️ Control Panel UI
+
+#### 1. Wallpaper Gallery
+> *Drag & drop videos, run the one-click GPU Optimizer (4K → 1080p), and play/pause instantly from YouTube-style gallery cards with per-video codec/FPS/bitrate tooltips:*
+
+<div align="center">
+  <img src="assets/screenshots/ui_gallery.png" alt="MiniWallpaper Wallpaper Gallery" width="860" />
+</div>
+
+#### 2. Performance & Advanced
+> *Live CPU / RAM / VRAM telemetry, render engine and frame-pacing controls, connected-monitor overview, and the Gaming Auto-Sleep resource governor:*
+
+<div align="center">
+  <img src="assets/screenshots/ui_performance.png" alt="MiniWallpaper Performance & Advanced" width="860" />
 </div>
 
 ---
