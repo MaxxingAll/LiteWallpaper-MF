@@ -48,7 +48,9 @@ jobs:
           Copy-Item "build/Release/MiniWallpaper.exe" "dist/MiniWallpaper-Portable/" -Force
           Copy-Item "build/Release/MiniWallpaper.scr" "dist/MiniWallpaper-Portable/" -Force
           Copy-Item "build/Release/*.dll" "dist/MiniWallpaper-Portable/" -Force
-          Copy-Item "third_party/ffmpeg/bin/*.dll" "dist/MiniWallpaper-Portable/" -Force
+          # Copy only the FFmpeg runtime DLLs the app links against
+          # (skip avfilter/avdevice: +38 MB of dead weight in the release zip)
+          Get-ChildItem "third_party/ffmpeg/bin/*.dll" | Where-Object { $_.BaseName -notmatch '^av(filter|device)' } | Copy-Item -Destination "dist/MiniWallpaper-Portable/" -Force
           Copy-Item "assets/*" "dist/MiniWallpaper-Portable/assets/" -Recurse -Force
           Copy-Item "README.md" "dist/MiniWallpaper-Portable/" -Force
           Copy-Item "LICENSE" "dist/MiniWallpaper-Portable/" -Force
