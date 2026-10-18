@@ -54,6 +54,18 @@ jobs:
           Copy-Item "assets/*" "dist/MiniWallpaper-Portable/assets/" -Recurse -Force
           Copy-Item "README.md" "dist/MiniWallpaper-Portable/" -Force
           Copy-Item "LICENSE" "dist/MiniWallpaper-Portable/" -Force
+          # Bundle the VC++ runtime app-locally so the portable build also runs on
+          # machines without the Visual C++ Redistributable installed.
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vcCrt = $null
+          foreach ($vd in (Get-ChildItem "$vsPath\VC\Redist\MSVC" -Directory | Where-Object { $_.Name -match '^\d+\.\d+' } | Sort-Object { [version]$_.Name } -Descending)) {
+            $cand = Get-ChildItem (Join-Path $vd.FullName 'x64\Microsoft.VC*.CRT') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($cand) { $vcCrt = $cand; break }
+          }
+          if (-not $vcCrt) { throw 'VC++ runtime redist folder not found' }
+          foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            Copy-Item (Join-Path $vcCrt.FullName $dll) "dist/MiniWallpaper-Portable/" -Force
+          }
           Compress-Archive -Path "dist/MiniWallpaper-Portable/*" -DestinationPath "MiniWallpaper-Portable-$ver-win64.zip" -Force
 
       - name: Upload to GitHub Release
