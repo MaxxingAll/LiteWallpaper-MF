@@ -49,13 +49,6 @@ MiniWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** fro
   <img src="assets/screenshots/task_manager_benchmark.png" alt="Windows Task Manager Benchmark" width="560" />
 </div>
 
-#### 2. In-App Real-Time Hardware Telemetry
-> *Telemetry dashboard demonstrating Intel UHD Graphics (iGPU) hardware decoding with **0.0% CPU overhead**:*
-
-<div align="center">
-  <img src="assets/screenshots/resource_telemetry.png" alt="Resource Telemetry" width="680" />
-</div>
-
 ### 🖥️ Control Panel UI
 
 #### 1. Wallpaper Gallery
