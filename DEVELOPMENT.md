@@ -25,10 +25,10 @@ MiniWallpaper is engineered with extreme performance constraints that differenti
 | Constraint | Target / Rule | Rationale |
 |:---|:---|:---|
 | **CPU Usage** | **< 1.0%** (0.0% when idle/locked) | Adaptive QPC frame pacing; hardware-accelerated video decoding |
-| **RAM Usage** | **≤ 10 MB background / ≤ 15 MB panel-open** (verified on the live daemon in deep sleep: 4.6 MB background, 5.6 MB panel-open; playing: ~18–20 MB) | Native C++20 + mimalloc; zero web runtime overhead (no Electron/Chromium/WPF) |
+| **RAM Usage** | **≤ 10 MB background / ≤ 15 MB panel-open** (verified on the live daemon in deep sleep: 4.6 MB background, 5.6 MB panel-open; playing: 6–10 MB with the adaptive working-set trim) | Native C++20 + mimalloc; zero web runtime overhead (no Electron/Chromium/WPF) |
 | **GPU Power Saving**| **Deep Sleep for dGPU (0% NVIDIA load)** | Automatic smart routing to Integrated GPU (Intel UHD / AMD APU) |
 | **Compatibility** | **Windows 7 SP1+ → Windows 11** | Direct3D 11 with FLIP_DISCARD on Win10/11 and DISCARD fallback on Win7 |
-| **Process Model** | **Unified Single-Executable Architecture** | Shared D3D11 device between renderer and panel; closing the panel releases the full UI stack (device refs, ImGui, swapchain, thumbnails); deep sleep releases the video decoder itself |
+| **Process Model** | **Unified Single-Executable Architecture** | Shared D3D11 device between renderer and panel; closing or minimizing the panel (X, title-bar minimize button, Win+Down / taskbar minimize) releases the full UI stack (device refs, ImGui, swapchain, thumbnails); deep sleep releases the video decoder itself |
 
 ---
 
@@ -41,7 +41,7 @@ MiniWallpaper is built as a unified native binary (`MiniWallpaper.exe`) combinin
 │                    MiniWallpaper.exe                        │
 ├─────────────────────────────────────────────────────────────┤
 │  1. Background Desktop Renderer Loop                        │
-│     - Memory: ~1 MB deep-sleep, ~19 MB playing | CPU<1%     │
+│     - Memory: ~1 MB deep-sleep, ~6-10 MB playing | CPU<1%   │
 │     - Injects into desktop canvas (WorkerW 0x052C)          │
 │     - D3D11VA Hardware Accelerated Video Decoding           │
 │     - Low-overhead WASAPI Shared Audio Output               │
@@ -224,9 +224,10 @@ When contributing code to MiniWallpaper, **always adhere to these principles**:
 
 1. **Preserve Ultra-Low RAM Footprint**: Never introduce heavy libraries, web runtimes, or unmanaged thread pools into hot render loops.
 2. **Thread Safety**: All state shared between the daemon render loop and the UI thread must use `std::atomic` or `g_decoder_mutex` protection.
-3. **Release the UI Stack on Close**: Closing the Control Panel must destroy its window and release the ImGui context, font atlas, swapchain, DXGI device references and thumbnail textures (`SettingsUI::ReleaseUiStack()`) instead of only hiding the window. The panel reuses the daemon's D3D11 device via `D3D11Presenter::GetSharedD3DDevice()`; a second device (and its driver allocation) is only created by the standalone `--screenshot` / `/c`-without-daemon fallback path.
+3. **Release the UI Stack on Close or Minimize**: Closing *or minimizing* the Control Panel (X button, title-bar minimize button, Win+Down / taskbar minimize — all three funnel into `SettingsUI::Close()`) must destroy its window and release the ImGui context, font atlas, swapchain, DXGI device references and thumbnail textures (`SettingsUI::ReleaseUiStack()`) instead of only hiding the window. The panel reuses the daemon's D3D11 device via `D3D11Presenter::GetSharedD3DDevice()`; a second device (and its driver allocation) is only created by the standalone `--screenshot` / `/c`-without-daemon fallback path.
 4. **Desktop Cleanup on Stop**: Detaching the wallpaper must trigger desktop refresh (`SystemParametersInfoW(SPI_SETDESKWALLPAPER, ...)` + `InvalidateRect`) to restore native Windows wallpaper cleanly.
 5. **Deep Sleep Releases the Decoder**: Every suspend path (governor resource/fullscreen/lock triggers, and manual pause) must funnel through `EnterDeepSuspend()` / `LeaveDeepSuspend()` in `main.cpp`. Never suspend by merely stopping the render loop: the decoder, its D3D11VA frame pool and FFmpeg contexts must be closed, and the playback position saved so resume can reopen and `SeekTo()` back to where the user left off.
+6. **Bound the Playing Working Set (Adaptive Trim)**: The D3D11VA decode/present pipeline re-warms ~12 MB of pages in one burst per loop re-prime and then never touches them until the next cycle. The render loop must re-trim (`TrimWorkingSetMemory()`) as soon as the working set crosses the soft cap (16 MB, checked once per second, minimum 8 s between trims; a 30 s fallback covers idle states) so Task Manager's *Memory* column stays in the 6–10 MB band without measurable CPU or page-fault cost.
 
 ---
 
@@ -237,17 +238,21 @@ When contributing code to MiniWallpaper, **always adhere to these principles**:
 - `privateWS` — Task Manager's *Memory* column (active private working set; computed per page via `QueryWorkingSet`'s `Shared` flag)
 - `ws`, `privateCommit`, `peakWS`, `threads`
 - per-phase top modules / anonymous memory attribution
-- `*-trimmed` samples taken ~1.2 s after `TrimWorkingSetMemory()`, matching what Task Manager shows right after the daemon's 30 s trim
+- `*-trimmed` samples taken ~1.2 s after `TrimWorkingSetMemory()`, matching what Task Manager shows right after a working-set trim (adaptive on memory creep, 30 s fallback)
 - an `OPEN/CLOSE ×5` leak-check phase, then a **deep-suspend phase** (panel closed), a **deep-suspend + panel-open phase** and a **resume phase** (decoder reopened + seek back)
 
 The probe runs 6 phases, which is how the numbers below were verified (release build, NVIDIA RTX 3060 Laptop GPU, 1920×1080 @ 60 fps hardware-decoded wallpaper):
 
-| State (panel / wallpaper) | privateWS steady | Right after 30 s trim |
+| State (panel / wallpaper) | privateWS steady | Right after a working-set trim |
 |:---|:---|:---|
 | Background, **deep sleep** (governor suspend or manual pause, decoder fully released) | **1.1 MB** | 0.2 MB |
 | Control panel open, **deep sleep** (decoder released) | **10.4–11.5 MB** | 0.2 MB |
-| Background or panel open, wallpaper playing | ~19–23 MB (dominated by the D3D11VA decode/present pipeline, not the UI) | 0.1–0.4 MB |
+| Background or panel open, wallpaper playing | **6–10 MB** with the adaptive working-set trim (steady; the pipeline re-warms ~12 MB for < 1 s per loop re-prime, trimmed on the next 1 s check). Before the adaptive trim: ~19–23 MB | 0.1–0.4 MB |
 | Panel closed after use | full UI-stack release, window destroyed (`hwnd = 0`), no retained resident memory | 0.2 MB |
+
+### Adaptive working-set trim (playing state)
+
+While the wallpaper plays, the D3D11VA decode/present pipeline warms up ~12 MB of pages in a short burst once per loop re-prime (measured: ~6,400 faults within one second), then leaves them resident even though they are not touched again until the next cycle — the old fixed 30 s trim let Task Manager show a 19–23 MB plateau most of the time. The daemon therefore re-trims as soon as the working set crosses a 16 MB soft cap (checked once per second, minimum 8 s between trims; the 30 s cadence remains as a fallback for idle states). Measured cost: steady-state < 200 faults/s, one ~6 k-fault re-warm burst per trim (tens of ms), CPU unchanged — while the *Memory* column stays in a 6–10 MB band. The fullscreen-game / high-RAM / high-VRAM safeguards are untouched.
 
 Deep-sleep semantics (the deep-suspend and resume phases verify the whole contract):
 
@@ -261,12 +266,13 @@ Cross-check on the **live daemon** (injected wallpaper, same machine, `Working S
 
 | Live daemon state | privateWS |
 |:---|:---|
-| Wallpaper playing, panel closed | ~18–20 MB |
+| Wallpaper playing, panel closed | **5.4–10 MB** (median 8.3; adaptive trim — sub-second ~19 MB spikes right after a loop re-prime, caught by the next 1 s check) |
+| Wallpaper playing, panel open | ~7–10 MB (panel pages are trimmed the same way; closing the panel returns ~3 MB instantly) |
 | **Deep sleep** (manual pause), panel closed | **4.6 MB** |
 | **Deep sleep**, control panel open | **5.6 MB** |
 | After `resume` (`{"cmd":"resume"}`) | decoder reopened, `frames_rendered` 306 → 665, `playing=true`, `hw_decode=true` |
 
-The probe table above measures ~1.2 s after `TrimWorkingSetMemory()` (the tightest case); in the live daemon the pages that the tray/panel/driver fault back in while suspended settle around 4–6 MB. Both stay well inside the ≤ 10 MB / ≤ 15 MB targets.
+The probe table above measures ~1.2 s after `TrimWorkingSetMemory()` (the tightest case); in the live daemon the pages that the tray/panel/driver fault back in while suspended settle around 4–6 MB. Both stay well inside the ≤ 10 MB / ≤ 15 MB targets. With the adaptive trim the playing state also stays inside its band: 6–10 MB typical, 5.4 MB floor, at the cost of one ~6 k-fault re-warm burst per loop re-prime (no CPU change).
 
 ---
 

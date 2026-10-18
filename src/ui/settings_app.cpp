@@ -546,6 +546,15 @@ static LRESULT WINAPI SettingsWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         }
 
         case WM_SIZE:
+            // Minimizing the panel (title bar button, taskbar menu, Win+Down)
+            // must behave exactly like close: release the whole UI stack so a
+            // hidden panel costs ~0 MB instead of keeping ImGui + swap chain +
+            // thumbnails resident. Closing from the message handler is safe
+            // (WM_CLOSE goes through the same Close() path).
+            if (wParam == SIZE_MINIMIZED) {
+                SettingsUI::Close();
+                return 0;
+            }
             if (g_pd3dDevice != nullptr && wParam != SIZE_MINIMIZED) {
                 CleanupRenderTarget();
                 g_pSwapChain->ResizeBuffers(0, (UINT)LOWORD(lParam), (UINT)HIWORD(lParam), DXGI_FORMAT_UNKNOWN, 0);
@@ -4064,7 +4073,10 @@ static void RenderCustomTitleBar(float winWidth, float titleBarH) {
         }
 
         if (clk) {
-            if (i == 0) ShowWindow(g_hWnd, SW_MINIMIZE);
+            // Minimize must behave like close: release the whole UI stack so a
+            // hidden panel costs ~0 MB instead of keeping ImGui + swap chain +
+            // thumbnails resident (the tray icon / IPC can reopen it instantly).
+            if (i == 0) SettingsUI::Close();
             else if (i == 1) {
                 if (isMax) ShowWindow(g_hWnd, SW_RESTORE);
                 else ShowWindow(g_hWnd, SW_MAXIMIZE);
