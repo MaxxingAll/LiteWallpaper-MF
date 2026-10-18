@@ -11,7 +11,7 @@
   [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=c%2B%2B)](https://en.wikipedia.org/wiki/C%2B%2B20)
   [![DirectX](https://img.shields.io/badge/DirectX-11%20HW%20Accelerated-green.svg)](https://learn.microsoft.com/windows/win32/direct3d11/direct3d-11-graphics)
   [![Platform](https://img.shields.io/badge/Windows-7%20%7C%208%20%7C%2010%20%7C%2011-0078D6?logo=windows)](https://microsoft.com/windows)
-  [![RAM Usage](https://img.shields.io/badge/RAM%20Usage-%3C%205.0%20MB-brightgreen.svg)]()
+  [![RAM Usage](https://img.shields.io/badge/RAM%20Usage-6--10%20MB-brightgreen.svg)]()
   [![CPU Usage](https://img.shields.io/badge/CPU%20Usage-%3C%201.0%25-brightgreen.svg)]()
 
   <p align="center">
@@ -22,27 +22,29 @@
 
 ---
 
-## ⚡ Performance Benchmarks (v1.1.0)
+## ⚡ Performance Benchmarks (v2.0.0)
 
 MiniWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** from the ground up, completely eliminating heavy web runtimes (Chromium/CEF/Electron/WPF) to achieve an unprecedented low-resource footprint:
 
-| Operational Metric | 🚀 **MiniWallpaper (v1.1.0)** | State / Verification Details |
+| Operational Metric | 🚀 **MiniWallpaper (v2.0.0)** | State / Verification Details |
 | :--- | :---: | :--- |
-| **RAM (Working Set - Active)** | **`~0.7 MB - 4.5 MB`** | 1080p 60 FPS hardware playback |
-| **RAM (Deep Suspend / Idle)** | **`< 2.0 MB`** | Automatic working set trim & zero-purge mimalloc |
-| **CPU Usage** | **`0.0% - 1.0%`** (avg `0.44%`) | Decoded entirely on GPU hardware ASIC (NVDEC / Intel QSV) |
+| **RAM (Task Manager "Memory")** | **`6 MB - 10 MB`** | 1080p 60 FPS hardware playback, adaptive working-set trim (median 8.3 MB) |
+| **RAM (Deep Suspend / Idle)** | **`< 1.0 MB`** | Decoder fully released + automatic working-set trim |
+| **CPU Usage** | **`0.0% - 1.0%`** (avg `~0.3%`) | Decoded entirely on GPU hardware ASIC (NVDEC / Intel QSV) |
 | **Dedicated VRAM** | **`~50 MB - 61 MB`** | Optimized 4–6 surface pool (drops to 0 MB on pause) |
 | **3D Graphics Core Load** | **`~3.0%`** | 3D rendering cores remain ~97% free for games |
 | **dGPU Power Saving** | 🟢 **Deep Sleep (0% dGPU load)** | Automatic routing to iGPU or deep suspend during gaming |
 | **Process Architecture** | **Native C++20 / Direct3D 11** | Zero external runtime dependencies, pure Win32 |
 
+> Verified on the live daemon (1920×1080 @ 60 fps hardware decode, October 2026). *Memory* = Task Manager's private working set: **5.4–10 MB while playing** with the adaptive working-set trim (median 8.3 MB; brief <1 s warm-up spikes), **< 1 MB in deep sleep**, ~5 MB in deep sleep with the control panel open.
+
 ### 📸 Real-World Telemetry
 
 #### 1. Windows Task Manager Footprint
-> *MiniWallpaper running with active 1080p hardware-accelerated video playback at only **4.4 MB RAM** and **1.1% CPU**:*
+> *MiniWallpaper running with active 1080p hardware-accelerated video playback at only **8.4 MB RAM** and **0.3% CPU** (Task Manager, control panel closed):*
 
 <div align="center">
-  <img src="assets/screenshots/task_manager_benchmark.png" alt="Windows Task Manager Benchmark" width="680" />
+  <img src="assets/screenshots/task_manager_benchmark.png" alt="Windows Task Manager Benchmark" width="560" />
 </div>
 
 #### 2. In-App Real-Time Hardware Telemetry
@@ -85,7 +87,7 @@ MiniWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** fro
 - 🎨 **Modern Control Panel & Translucent UI**: 4-tab responsive layout, YouTube-style gallery cards with resolution tooltips, and acrylic-style translucent glass window backdrop.
 - ⚡ **Integrated 1080p Video Optimizer**: Built-in GPU pre-scaler that converts heavy 4K/high-bitrate videos into lightweight 1080p NV12 hardware streams, saving up to ~75% GPU load.
 - 🖥️ **Multi-Monitor & Desktop Selection**: Choose whether wallpapers play across all monitors or selectively target specific screens.
-- 🚀 **Ultra-Low Memory Footprint**: Tuned mimalloc zero-purge and single-buffered streaming stabilizing physical RAM under 5 MB.
+- 🚀 **Ultra-Low Memory Footprint**: Tuned mimalloc zero-purge, single-buffered streaming and an adaptive working-set trim keeping Task Manager memory in the 6-10 MB band while playing (< 1 MB in deep sleep).
 
 ---
 
@@ -96,7 +98,7 @@ MiniWallpaper is engineered in native **C++20** and **DirectX 11 (D3D11VA)** fro
 2. Extract the archive to any folder of your choice.
 3. Run `MiniWallpaper.exe`.
 4. Drag & drop any video into the **Wallpaper Gallery**, click **Play**, and enjoy!
-5. Close the Control Panel to minimize MiniWallpaper to the system tray (`~4-12 MB RAM`).
+5. Close (or minimize) the Control Panel to send MiniWallpaper to the system tray — the full UI stack is released and the wallpaper keeps playing at only `~6-10 MB RAM`.
 
 ---
 
