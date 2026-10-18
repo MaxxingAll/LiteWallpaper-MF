@@ -48,6 +48,7 @@ void ThumbnailManager::ReleaseTextures() {
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_srv_map.clear();
+        m_srv_lru.clear();
         m_requested.clear();
         m_pending_uploads.clear();
     }
@@ -427,6 +428,18 @@ void ThumbnailManager::Update(ID3D11Device* device) {
             if (SUCCEEDED(device->CreateShaderResourceView(tex.Get(), &srvDesc, &srv))) {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 m_srv_map[item.video_path] = srv;
+                m_srv_lru.remove(item.video_path);
+                m_srv_lru.push_front(item.video_path);
+
+                // Evict least-recently-used thumbnails beyond the cap. The
+                // evicted path is also forgotten from m_requested so it can be
+                // re-requested (cheap: it is read back from the disk cache).
+                while (m_srv_lru.size() > MAX_RESIDENT_THUMBNAILS) {
+                    const std::string& victim = m_srv_lru.back();
+                    m_srv_map.erase(victim);
+                    m_requested.erase(victim);
+                    m_srv_lru.pop_back();
+                }
             }
         }
     }
@@ -439,6 +452,9 @@ ID3D11ShaderResourceView* ThumbnailManager::GetThumbnailSRV(ID3D11Device* device
         std::lock_guard<std::mutex> lock(m_mutex);
         auto it = m_srv_map.find(video_path);
         if (it != m_srv_map.end()) {
+            // Touching the entry marks it as most-recently-used for the cap.
+            m_srv_lru.remove(video_path);
+            m_srv_lru.push_front(video_path);
             return it->second.Get();
         }
 

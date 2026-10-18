@@ -23,6 +23,14 @@ struct DisplayViewport {
     float height = 0.0f;
 };
 
+// Process-wide shared D3D11 device (non-owning raw pointers).
+// The daemon creates the one and only device; the settings panel reuses it and
+// only creates its own swap chain on top. This saves a second device +
+// driver-side allocation (~2-4 MB private working set) while the panel is open.
+// Registered by D3D11Presenter::Init(), cleared by D3D11Presenter::Cleanup().
+ID3D11Device* GetSharedD3DDevice();
+ID3D11DeviceContext* GetSharedD3DDeviceContext();
+
 class D3D11Presenter {
 public:
     D3D11Presenter();

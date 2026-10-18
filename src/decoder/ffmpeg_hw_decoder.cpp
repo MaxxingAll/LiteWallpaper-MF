@@ -390,6 +390,33 @@ void FFmpegHWDecoder::SeekToStart() {
     SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
 }
 
+void FFmpegHWDecoder::SeekTo(double seconds) {
+    if (!m_fmt_ctx || m_video_stream_idx < 0) return;
+    if (seconds < 0.0) seconds = 0.0;
+
+    // Release VRAM slice held by last decoded frame before flushing
+    if (m_hw_frame) av_frame_unref(m_hw_frame);
+    if (m_audio_frame) av_frame_unref(m_audio_frame);
+    if (m_packet) av_packet_unref(m_packet);
+
+    const AVStream* st = m_fmt_ctx->streams[m_video_stream_idx];
+    int64_t ts = av_rescale_q(static_cast<int64_t>(seconds * AV_TIME_BASE), AV_TIME_BASE_Q, st->time_base);
+    if (st->duration > 0 && ts >= st->duration) {
+        ts = (st->duration > 1) ? (st->duration - 1) : 0;
+    }
+    av_seek_frame(m_fmt_ctx, m_video_stream_idx, ts, AVSEEK_FLAG_BACKWARD);
+    if (m_video_codec_ctx) {
+        avcodec_flush_buffers(m_video_codec_ctx);
+    }
+    if (m_audio_codec_ctx) {
+        avcodec_flush_buffers(m_audio_codec_ctx);
+    }
+
+    // Strip old GOP heap/working set left behind by the seek + flush
+    mi_collect(false);
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+}
+
 void FFmpegHWDecoder::FlushBuffers() {
     // Release VRAM slice held by last decoded frame to free GPU surface
     if (m_hw_frame) av_frame_unref(m_hw_frame);

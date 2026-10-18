@@ -38,6 +38,11 @@ public:
     
     // Seek to beginning of video for seamless looping
     virtual void SeekToStart() = 0;
+
+    // Seek to an absolute position (seconds) inside the current stream.
+    // Best effort: decoding resumes at the nearest keyframe at or before the
+    // target. Used to restore the playback position after a deep suspend.
+    virtual void SeekTo(double seconds) { (void)seconds; }
     
     // Get video information
     virtual VideoInfo GetInfo() const = 0;
@@ -51,7 +56,8 @@ public:
     
     virtual void Close() = 0;
 
-    // Release cached frames and flush codec buffers (for deep suspend)
+    // Release cached frames and flush codec buffers (partial release; the
+    // daemon's deep suspend now fully closes the decoder via Close() instead)
     virtual void FlushBuffers() {}
 };
 

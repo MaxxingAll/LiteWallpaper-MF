@@ -14,6 +14,7 @@ Welcome to the **MiniWallpaper** codebase! This guide is written for developers 
 7. [IPC & Engine Command Protocol](#-ipc--engine-command-protocol)
 8. [Critical Engineering Rules](#-critical-engineering-rules)
 9. [Hardware Acceleration & Dual-GPU Pipeline](#-hardware-acceleration--dual-gpu-pipeline)
+10. [Memory Verification (`--memprobe`)](#-memory-verification---memprobe)
 
 ---
 
@@ -24,10 +25,10 @@ MiniWallpaper is engineered with extreme performance constraints that differenti
 | Constraint | Target / Rule | Rationale |
 |:---|:---|:---|
 | **CPU Usage** | **< 1.0%** (0.0% when idle/locked) | Adaptive QPC frame pacing; hardware-accelerated video decoding |
-| **RAM Usage** | **< 15 MB** (typically 4.4–12 MB) | Native C++20 + mimalloc; zero web runtime overhead (no Electron/Chromium/WPF) |
+| **RAM Usage** | **≤ 10 MB background / ≤ 15 MB panel-open** (verified on the live daemon in deep sleep: 4.6 MB background, 5.6 MB panel-open; playing: ~18–20 MB) | Native C++20 + mimalloc; zero web runtime overhead (no Electron/Chromium/WPF) |
 | **GPU Power Saving**| **Deep Sleep for dGPU (0% NVIDIA load)** | Automatic smart routing to Integrated GPU (Intel UHD / AMD APU) |
 | **Compatibility** | **Windows 7 SP1+ → Windows 11** | Direct3D 11 with FLIP_DISCARD on Win10/11 and DISCARD fallback on Win7 |
-| **Process Model** | **Unified Single-Executable Architecture** | Zero IPC latency; UI resources freed on hide-to-tray |
+| **Process Model** | **Unified Single-Executable Architecture** | Shared D3D11 device between renderer and panel; closing the panel releases the full UI stack (device refs, ImGui, swapchain, thumbnails); deep sleep releases the video decoder itself |
 
 ---
 
@@ -40,7 +41,7 @@ MiniWallpaper is built as a unified native binary (`MiniWallpaper.exe`) combinin
 │                    MiniWallpaper.exe                        │
 ├─────────────────────────────────────────────────────────────┤
 │  1. Background Desktop Renderer Loop                        │
-│     - Memory: ~4.4 MB - 12 MB RAM | CPU: < 1.0%             │
+│     - Memory: ~1 MB deep-sleep, ~19 MB playing | CPU<1%     │
 │     - Injects into desktop canvas (WorkerW 0x052C)          │
 │     - D3D11VA Hardware Accelerated Video Decoding           │
 │     - Low-overhead WASAPI Shared Audio Output               │
@@ -223,8 +224,49 @@ When contributing code to MiniWallpaper, **always adhere to these principles**:
 
 1. **Preserve Ultra-Low RAM Footprint**: Never introduce heavy libraries, web runtimes, or unmanaged thread pools into hot render loops.
 2. **Thread Safety**: All state shared between the daemon render loop and the UI thread must use `std::atomic` or `g_decoder_mutex` protection.
-3. **Non-Destructive UI Hiding**: Control Panel hiding must preserve smooth state without memory leaks.
+3. **Release the UI Stack on Close**: Closing the Control Panel must destroy its window and release the ImGui context, font atlas, swapchain, DXGI device references and thumbnail textures (`SettingsUI::ReleaseUiStack()`) instead of only hiding the window. The panel reuses the daemon's D3D11 device via `D3D11Presenter::GetSharedD3DDevice()`; a second device (and its driver allocation) is only created by the standalone `--screenshot` / `/c`-without-daemon fallback path.
 4. **Desktop Cleanup on Stop**: Detaching the wallpaper must trigger desktop refresh (`SystemParametersInfoW(SPI_SETDESKWALLPAPER, ...)` + `InvalidateRect`) to restore native Windows wallpaper cleanly.
+5. **Deep Sleep Releases the Decoder**: Every suspend path (governor resource/fullscreen/lock triggers, and manual pause) must funnel through `EnterDeepSuspend()` / `LeaveDeepSuspend()` in `main.cpp`. Never suspend by merely stopping the render loop: the decoder, its D3D11VA frame pool and FFmpeg contexts must be closed, and the playback position saved so resume can reopen and `SeekTo()` back to where the user left off.
+
+---
+
+## 🧪 Memory Verification (`--memprobe`)
+
+`MiniWallpaper.exe --memprobe [seconds]` is a hidden developer mode that boots the engine **without side effects** (no WorkerW injection, no wallpaper/lockscreen writes, no `Config::Save`, hidden 1920×1080 window, no tray, but full IPC server, governor, thumbnail worker and audio init). It samples the process once per second and writes `memprobe.txt` next to the executable:
+
+- `privateWS` — Task Manager's *Memory* column (active private working set; computed per page via `QueryWorkingSet`'s `Shared` flag)
+- `ws`, `privateCommit`, `peakWS`, `threads`
+- per-phase top modules / anonymous memory attribution
+- `*-trimmed` samples taken ~1.2 s after `TrimWorkingSetMemory()`, matching what Task Manager shows right after the daemon's 30 s trim
+- an `OPEN/CLOSE ×5` leak-check phase, then a **deep-suspend phase** (panel closed), a **deep-suspend + panel-open phase** and a **resume phase** (decoder reopened + seek back)
+
+The probe runs 6 phases, which is how the numbers below were verified (release build, NVIDIA RTX 3060 Laptop GPU, 1920×1080 @ 60 fps hardware-decoded wallpaper):
+
+| State (panel / wallpaper) | privateWS steady | Right after 30 s trim |
+|:---|:---|:---|
+| Background, **deep sleep** (governor suspend or manual pause, decoder fully released) | **1.1 MB** | 0.2 MB |
+| Control panel open, **deep sleep** (decoder released) | **10.4–11.5 MB** | 0.2 MB |
+| Background or panel open, wallpaper playing | ~19–23 MB (dominated by the D3D11VA decode/present pipeline, not the UI) | 0.1–0.4 MB |
+| Panel closed after use | full UI-stack release, window destroyed (`hwnd = 0`), no retained resident memory | 0.2 MB |
+
+Deep-sleep semantics (the deep-suspend and resume phases verify the whole contract):
+
+- Suspend releases the decoder **completely** (`EnterDeepSuspend()` → `FFmpegHWDecoder::Close()`: FFmpeg contexts, D3D11VA frame pool and codec buffers) instead of only flushing its frame queue. The last presented frame stays on screen, so the desktop still shows the frozen wallpaper.
+- The playback position is captured at suspend and restored on resume: the video is reopened and `SeekTo(position)` lands on the nearest keyframe at or before it (probe: suspended at frame `pts=180224`, decoding resumed at `pts=61440` for a 5.3 s target, 361 frames rendered in the following 12 s). Reopening costs ~0.3–0.5 s once per resume — in exchange for the freed driver/decoder pages above.
+- `FlushBuffers()` (partial release) remains in the decoder interface but is no longer used by the daemon path.
+
+For reference, comparing against the earlier optimization rounds (same metric, same machine): a build that only *hid* the control panel kept its whole UI stack committed (19.5 MB panel-open, window handle still alive after closing); after the UI-stack release but before the decoder release, a suspended wallpaper still cost 15.5 MB panel-open / 7.7 MB background because the decoder stayed resident.
+
+Cross-check on the **live daemon** (injected wallpaper, same machine, `Working Set - Private` counter; sequence: pause → 10 s → open panel → resume):
+
+| Live daemon state | privateWS |
+|:---|:---|
+| Wallpaper playing, panel closed | ~18–20 MB |
+| **Deep sleep** (manual pause), panel closed | **4.6 MB** |
+| **Deep sleep**, control panel open | **5.6 MB** |
+| After `resume` (`{"cmd":"resume"}`) | decoder reopened, `frames_rendered` 306 → 665, `playing=true`, `hw_decode=true` |
+
+The probe table above measures ~1.2 s after `TrimWorkingSetMemory()` (the tightest case); in the live daemon the pages that the tray/panel/driver fault back in while suspended settle around 4–6 MB. Both stay well inside the ≤ 10 MB / ≤ 15 MB targets.
 
 ---
 

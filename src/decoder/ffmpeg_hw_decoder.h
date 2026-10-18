@@ -12,6 +12,7 @@ extern "C" {
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_d3d11va.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/mathematics.h>
 #include <libavutil/opt.h>
 #include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
@@ -27,6 +28,7 @@ public:
     bool Open(const char* path, ID3D11Device* d3d_device, int max_width = 0, int max_height = 0) override;
     bool DecodeNextFrame(VideoFrame& frame) override;
     void SeekToStart() override;
+    void SeekTo(double seconds) override;
     VideoInfo GetInfo() const override;
     bool HasAudio() const override;
     int DecodeAudioSamples(float* buffer, int max_samples) override;

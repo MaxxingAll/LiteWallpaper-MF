@@ -8,6 +8,7 @@
 #include <thread>
 #include <atomic>
 #include <deque>
+#include <list>
 #include <condition_variable>
 
 using Microsoft::WRL::ComPtr;
@@ -18,6 +19,10 @@ class ThumbnailManager {
 public:
     static constexpr int THUMB_WIDTH = 160;
     static constexpr int THUMB_HEIGHT = 90;
+
+    // Hard cap on resident GPU thumbnails. Each thumbnail is 160x90 BGRA
+    // (~56 KB); without a cap a large gallery keeps every preview forever.
+    static constexpr size_t MAX_RESIDENT_THUMBNAILS = 24;
 
     static ThumbnailManager& Instance();
 
@@ -66,6 +71,7 @@ private:
 
     std::mutex m_mutex;
     std::unordered_map<std::string, ComPtr<ID3D11ShaderResourceView>> m_srv_map;
+    std::list<std::string> m_srv_lru;   // most-recently-used first
     std::unordered_map<std::string, bool> m_requested;
     std::deque<PendingUpload> m_pending_uploads;
     

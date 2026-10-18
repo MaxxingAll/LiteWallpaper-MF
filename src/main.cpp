@@ -7,6 +7,7 @@
 #include <mmsystem.h>
 #include <commdlg.h>
 #include <psapi.h>
+#include <tlhelp32.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <string>
@@ -34,10 +35,12 @@ namespace fs = std::filesystem;
 #include "platform/win32/hardware_info.h"
 #include "platform/win32/lockscreen_manager.h"
 #include "ui/settings_app.h"
+#include "ui/thumbnail_manager.h"
 
 #define WM_APP_OPEN_SETTINGS (WM_APP + 10)
 #define WM_APP_ATTACH        (WM_APP + 11)
 #define WM_APP_DEATTACH      (WM_APP + 12)
+#define WM_APP_SET_RENDER_DEVICE (WM_APP + 13)   // wParam = gpu_index + 1 (0 encodes -1)
 
 using namespace miniwp;
 
@@ -71,6 +74,12 @@ static uint64_t g_frames_decoded = 0;
 
 static bool g_fullscreen_paused = false;
 static std::string g_loaded_video_path; // Last video successfully opened in the decoder
+
+// Playback position (seconds) captured when a deep suspend released the decoder (-1 = none).
+// Used to seek back to where the user left off once playback resumes.
+static double g_suspend_resume_position_sec = -1.0;
+// Last valid decoder info. Kept so panels stay populated while the decoder is released.
+static VideoInfo g_cached_video_info;
 
 // Target display viewport cache (avoids calling EnumDisplayMonitors on every 60 FPS frame)
 static std::vector<DisplayViewport> s_cached_target_vps;
@@ -219,6 +228,7 @@ static void OpenWallpaperDialog() {
         cfg.AddToGallery(utf8_path);
         g_config.Save();
 
+        g_suspend_resume_position_sec = -1.0; // explicit selection: always start from the beginning
         OpenWallpaperVideo(utf8_path);
         TrimWorkingSetMemory();
     }
@@ -246,13 +256,16 @@ static bool OpenWallpaperVideo(const std::string& path) {
     g_paused = false;
     g_clock.Reset();
     g_loaded_video_path.clear();
+    g_shared_engine_state.current_time_sec.store(0.0);
     if (!ok) {
+        g_cached_video_info = VideoInfo{};
         g_last_error = "Failed to open video: " + path;
         Logger::Info(g_last_error);
         return false;
     }
     g_loaded_video_path = path;
     auto info = g_decoder.GetInfo();
+    g_cached_video_info = info;
     g_last_error.clear();
     SetVideoPacing(info.fps);
     Logger::Info("Opened video OK: ", path,
@@ -265,6 +278,66 @@ static bool OpenWallpaperVideo(const std::string& path) {
 
 static uint64_t g_pause_start_us = 0;
 static bool g_deep_suspended = false;
+
+// Deep Sleep (Gaming Auto-Sleep / long pause): release the decoder completely -
+// FFmpeg contexts, D3D11VA frame pool and codec buffers - instead of only
+// flushing its frame queue. This drops the suspended wallpaper down to the bare
+// process shell while the user games or works. The playback position is
+// remembered so resume can seek back to where the user left off.
+static void EnterDeepSuspend() {
+    if (g_deep_suspended) return;
+    g_deep_suspended = true;
+    g_audio.Stop();
+
+    double saved_pos = 0.0;
+    {
+        std::lock_guard<std::mutex> lock(g_decoder_mutex);
+        double pos = g_shared_engine_state.current_time_sec.load();
+        if (pos > 0.0 && !g_loaded_video_path.empty()) {
+            g_suspend_resume_position_sec = pos;
+            saved_pos = pos;
+        }
+        g_decoder.Close();
+        g_current_frame = VideoFrame{};
+        g_presenter.ResetStartFrame();
+        g_first_frame_captured = false;
+        g_loaded_video_path.clear();
+    }
+    TrimWorkingSetMemory();
+    if (saved_pos > 0.0) {
+        Logger::Info("Deep suspend active: released decoder (VRAM + RAM) & trimmed working set, position=", saved_pos, "s");
+    } else {
+        Logger::Info("Deep suspend active: released decoder (VRAM + RAM) & trimmed working set");
+    }
+}
+
+// Reopen the decoder that deep suspend released and seek back to the position
+// captured by EnterDeepSuspend() (best effort: decoding lands on the nearest
+// keyframe at or before that position).
+static void LeaveDeepSuspend() {
+    g_deep_suspended = false;
+    g_pause_start_us = 0;
+
+    auto& cfg = g_config.Get();
+    bool need_load = false;
+    {
+        std::lock_guard<std::mutex> lock(g_decoder_mutex);
+        need_load = g_loaded_video_path.empty() && !cfg.wallpapers.empty() && !cfg.wallpapers[0].video_path.empty();
+    }
+    if (need_load) {
+        OpenWallpaperVideo(cfg.wallpapers[0].video_path);
+    }
+    if (g_suspend_resume_position_sec > 0.0) {
+        std::lock_guard<std::mutex> lock(g_decoder_mutex);
+        g_decoder.SeekTo(g_suspend_resume_position_sec);
+        g_suspend_resume_position_sec = -1.0;
+    }
+    if (!cfg.wallpapers.empty() && cfg.wallpapers[0].audio_enabled && cfg.wallpapers[0].volume > 0.0f && !g_audio.IsRunning()) {
+        g_audio.Init();
+    }
+    g_clock.Reset();
+    Logger::Info("Resumed from deep suspend: decoder reopened, playback restored");
+}
 
 static void SuspendWallpaper(const std::string& reason = "Fullscreen app", const std::string& detail = "") {
     if (g_fullscreen_paused) return;
@@ -283,22 +356,24 @@ static void ResumeWallpaper() {
     g_fullscreen_paused = false;
     g_shared_engine_state.paused.store(false);
     g_pause_start_us = 0;
-    if (g_deep_suspended) {
-        g_deep_suspended = false;
-        Logger::Info("Resumed from deep suspend (VRAM/RAM restored)");
-    }
 
     auto& cfg = g_config.Get();
-    // Self-healing: if a wallpaper was requested while playback was suspended
-    // (e.g. Play clicked during Gaming Auto-Sleep / fullscreen pause), load it now
-    // so the user's selection starts playing without requiring another click.
-    bool need_load = false;
-    {
-        std::lock_guard<std::mutex> lock(g_decoder_mutex);
-        need_load = g_loaded_video_path.empty() && !cfg.wallpapers.empty() && !cfg.wallpapers[0].video_path.empty();
-    }
-    if (need_load) {
-        OpenWallpaperVideo(cfg.wallpapers[0].video_path);
+    if (g_deep_suspended) {
+        // Deep suspend released the decoder: reopen it and seek back to the
+        // playback position where the user left off.
+        LeaveDeepSuspend();
+    } else {
+        // Self-healing: if a wallpaper was requested while playback was suspended
+        // (e.g. Play clicked during Gaming Auto-Sleep / fullscreen pause), load it now
+        // so the user's selection starts playing without requiring another click.
+        bool need_load = false;
+        {
+            std::lock_guard<std::mutex> lock(g_decoder_mutex);
+            need_load = g_loaded_video_path.empty() && !cfg.wallpapers.empty() && !cfg.wallpapers[0].video_path.empty();
+        }
+        if (need_load) {
+            OpenWallpaperVideo(cfg.wallpapers[0].video_path);
+        }
     }
     if (!cfg.wallpapers.empty() && cfg.wallpapers[0].audio_enabled && cfg.wallpapers[0].volume > 0.0f) {
         g_audio.Init();
@@ -559,6 +634,9 @@ static void MigrateLegacyRegistryPaths() {
     FixLegacyRegSzPath(HKEY_CURRENT_USER, cspKey, L"LockScreenImageUrl", oldRoot, newRoot);
 }
 
+// Development-only memory probe (defined below, next to the window procedures).
+static int RunMemoryProbe(HINSTANCE hInstance, int seconds_per_phase);
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpCmdLine, int /*nCmdShow*/) {
     // DPI awareness agar teks tajam & tidak di-stretch DWM (penting di scaling 125%/150%+).
     // Aman di semua OS: API dimuat dinamis + fallback berlapis, hasil gagal diabaikan.
@@ -641,6 +719,23 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
         if (MatchArg(lpCmdLine, L"/p") || MatchArg(lpCmdLine, L"/P") ||
             MatchArg(lpCmdLine, L"-p") || MatchArg(lpCmdLine, L"-P")) {
             return 0;
+        }
+
+        // Development-only memory probe: `--memprobe [seconds]`.
+        // Runs before the single-instance check so it can measure alongside a
+        // running instance (it never injects into the desktop).
+        if (MatchArg(lpCmdLine, L"--memprobe") || MatchArg(lpCmdLine, L"-memprobe")) {
+            int probe_seconds = 5;
+            const wchar_t* ps = wcsstr(lpCmdLine, L"--memprobe");
+            if (!ps) ps = wcsstr(lpCmdLine, L"-memprobe");
+            if (ps) {
+                ps += (wcsstr(ps, L"--memprobe") == ps) ? 10 : 9;
+                while (*ps == L' ' || *ps == L'=' || *ps == L':') ps++;
+                if (*ps >= L'0' && *ps <= L'9') probe_seconds = _wtoi(ps);
+            }
+            if (probe_seconds < 2) probe_seconds = 2;
+            if (probe_seconds > 60) probe_seconds = 60;
+            return RunMemoryProbe(hInstance, probe_seconds);
         }
     }
 
@@ -933,7 +1028,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
                 nullptr, nullptr, GetModuleHandleW(nullptr), nullptr
             );
             if (g_main_hwnd) {
+                // Explorer rebuilt the shell: the presenter re-creates its D3D11
+                // device below, so the settings panel (which shares that device)
+                // has to let go of its swap chain first.
+                bool ui_was_open = SettingsUI::IsOpen();
+                SettingsUI::Shutdown();
                 g_presenter.Init(g_main_hwnd, vw, vh, cfg.gpu_device_index);
+                if (ui_was_open) SettingsUI::Open(GetModuleHandleW(nullptr));
             }
         }
 
@@ -988,7 +1089,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
         if (now_us - last_state_update_us >= state_interval_us) {
             last_state_update_us = now_us;
             std::string cur_vid = (!cfg.wallpapers.empty()) ? cfg.wallpapers[0].video_path : "";
-            auto info = g_decoder.GetInfo();
+            VideoInfo info;
+            {
+                std::lock_guard<std::mutex> lock(g_decoder_mutex);
+                info = g_decoder.GetInfo();
+                if (info.duration_seconds > 0.0 || info.width > 0) {
+                    g_cached_video_info = info;
+                } else {
+                    // Decoder released by deep suspend: keep the last known values so
+                    // panels stay populated instead of showing 0x0 / 0s.
+                    info = g_cached_video_info;
+                }
+            }
             PROCESS_MEMORY_COUNTERS_EX pmc = {};
             size_t ram = 0;
             size_t ram_priv = 0;
@@ -998,7 +1110,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
             }
             double cpu = GetProcessCpuUsagePercent();
             size_t vram = g_presenter.GetVramUsageMB();
-            if (vram == 0 && g_decoder_hw && !g_presenter.IsSoftwareMode()) {
+            if (vram == 0 && g_decoder_hw && !g_presenter.IsSoftwareMode() && !g_deep_suspended) {
                 vram = GetProcessVramUsageMB(info.width, info.height, vw, vh, g_decoder_hw);
             }
             if (g_presenter.IsSoftwareMode()) {
@@ -1036,6 +1148,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
         if (now_us - last_trim_us >= 30000000) {
             last_trim_us = now_us;
             TrimWorkingSetMemory();
+        }
+
+        // Manual pause (panel button or tray toggle): release the decoder after a
+        // short grace period exactly like the governor does, so a paused wallpaper
+        // costs no more than the bare process shell. The frozen frame stays on
+        // screen; resume reopens the video and seeks back to the same position.
+        if (g_paused && !g_fullscreen_paused) {
+            if (g_pause_start_us == 0) g_pause_start_us = now_us;
+            if (!g_deep_suspended && (now_us - g_pause_start_us >= 5000000)) {
+                EnterDeepSuspend();
+            }
+        } else if (!g_paused && !g_fullscreen_paused && g_deep_suspended) {
+            LeaveDeepSuspend();
         }
 
         // When no active wallpaper is loaded or playback is unconfigured, sleep to consume 0% CPU
@@ -1077,16 +1202,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
             // Deep Suspend: If paused due to resource load, trigger immediately! Or if paused for >5s
             bool trigger_deep_suspend = resource_pause_active || (g_pause_start_us > 0 && (now_us - g_pause_start_us >= 5000000));
             if (!g_deep_suspended && trigger_deep_suspend) {
-                g_deep_suspended = true;
-                {
-                    std::lock_guard<std::mutex> lock(g_decoder_mutex);
-                    g_decoder.FlushBuffers();
-                    g_current_frame = VideoFrame{};
-                    g_presenter.ResetStartFrame();
-                    g_first_frame_captured = false;
-                }
-                TrimWorkingSetMemory();
-                Logger::Info("Deep suspend active: released decoder VRAM & trimmed working set");
+                EnterDeepSuspend();
             }
 
             // Keep the settings UI responsive while the wallpaper is suspended
@@ -1117,25 +1233,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
                 g_pause_start_us = now_us;
             }
             if (!g_deep_suspended && (now_us - g_pause_start_us >= 5000000)) {
-                g_deep_suspended = true;
-                {
-                    std::lock_guard<std::mutex> lock(g_decoder_mutex);
-                    g_decoder.FlushBuffers();
-                    g_current_frame = VideoFrame{};
-                    g_presenter.ResetStartFrame();
-                    g_first_frame_captured = false;
-                }
-                TrimWorkingSetMemory();
-                Logger::Info("Deep suspend active: released decoder VRAM & trimmed working set");
+                EnterDeepSuspend();
             }
             // Keep the settings UI responsive while playback is paused
             DWORD idleWaitMs = SettingsUI::IsOpen() ? 16 : 100;
             MsgWaitForMultipleObjects(0, nullptr, FALSE, idleWaitMs, QS_ALLINPUT);
             continue;
         } else if (!g_fullscreen_paused && g_deep_suspended) {
-            g_deep_suspended = false;
-            g_pause_start_us = 0;
-            Logger::Info("Resumed from deep suspend");
+            LeaveDeepSuspend();
         }
 
         int display_fps_cap = (power == PowerState::Reduced) ? cfg.battery_fps : cfg.target_fps;
@@ -1320,9 +1425,454 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR lpC
     return 0;
 }
 
+// ============================================================================
+// Development-only memory probe:  `MiniWallpaper.exe --memprobe [seconds]`
+//
+// Boots the real engine (presenter, decoder, IPC server, governor, thumbnail
+// worker) exactly like the daemon, but WITHOUT injecting into the desktop and
+// without touching wallpaper / lock screen files. It then samples the metrics
+// Task Manager shows (private working set, working set, private commit, thread
+// count) for: (1) background playback, (2) settings panel open, (3) panel
+// closed again, (4) 5x open/close leak check. Results are written next to the
+// executable as "memprobe.txt".
+// ============================================================================
+namespace {
+
+struct MemProbeSample {
+    size_t private_ws_kb = 0;   // Task Manager "Memory" (active private working set)
+    size_t ws_kb = 0;           // total working set (includes shared pages)
+    size_t private_commit_kb = 0;
+    size_t peak_ws_kb = 0;
+    size_t threads = 0;
+};
+
+// Enumerates every resident page of this process (address + attributes).
+// QueryWorkingSet reports the per-page Shared flag and is what Task Manager's
+// "Memory" column (active private working set) is derived from.
+// NOTE: QueryWorkingSetEx is the wrong tool here - it queries specific
+// addresses supplied by the caller, not the whole working set.
+bool ProbeEnumerateWorkingSet(std::vector<PSAPI_WORKING_SET_BLOCK>& out) {
+    PROCESS_MEMORY_COUNTERS_EX pmc = {};
+    if (!GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc))) return false;
+
+    size_t entry_capacity = pmc.WorkingSetSize / 4096 + 2048;
+    std::vector<BYTE> buffer;
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        buffer.resize(sizeof(PSAPI_WORKING_SET_INFORMATION) + entry_capacity * sizeof(PSAPI_WORKING_SET_BLOCK));
+        auto* ws = reinterpret_cast<PSAPI_WORKING_SET_INFORMATION*>(buffer.data());
+        if (QueryWorkingSet(GetCurrentProcess(), ws, (DWORD)buffer.size())) {
+            out.assign(ws->WorkingSetInfo, ws->WorkingSetInfo + ws->NumberOfEntries);
+            return true;
+        }
+        if (GetLastError() != ERROR_BAD_LENGTH) return false;
+        // On ERROR_BAD_LENGTH the API reports the required entry count.
+        entry_capacity = (size_t)ws->NumberOfEntries + 2048;
+    }
+    return false;
+}
+
+size_t ProbeQueryPrivateWorkingSetKB() {
+    std::vector<PSAPI_WORKING_SET_BLOCK> pages;
+    if (!ProbeEnumerateWorkingSet(pages)) return 0;
+    size_t private_pages = 0;
+    for (const auto& p : pages) {
+        if (!p.Shared) private_pages++;
+    }
+    return private_pages * 4; // 4 KB pages -> KB
+}
+
+size_t ProbeCountThreads() {
+    size_t count = 0;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snap == INVALID_HANDLE_VALUE) return 0;
+    THREADENTRY32 te = {};
+    te.dwSize = sizeof(te);
+    DWORD pid = GetCurrentProcessId();
+    if (Thread32First(snap, &te)) {
+        do {
+            if (te.th32OwnerProcessID == pid) count++;
+        } while (Thread32Next(snap, &te));
+    }
+    CloseHandle(snap);
+    return count;
+}
+
+MemProbeSample ProbeSampleMemory() {
+    MemProbeSample s;
+    PROCESS_MEMORY_COUNTERS_EX pmc = {};
+    if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc))) {
+        s.ws_kb = pmc.WorkingSetSize / 1024;
+        s.private_commit_kb = pmc.PrivateUsage / 1024;
+        s.peak_ws_kb = pmc.PeakWorkingSetSize / 1024;
+    }
+    s.private_ws_kb = ProbeQueryPrivateWorkingSetKB();
+    s.threads = ProbeCountThreads();
+    return s;
+}
+
+void ProbeLog(std::ofstream& out, const std::string& line) {
+    out << line << "\n";
+    out.flush();
+    Logger::Info("[memprobe] ", line);
+}
+
+// Diagnostic: attributes every resident page to its owning module and to
+// private vs shared memory, so odd working-set numbers can be traced.
+void ProbeLogTopModules(std::ofstream& out) {
+    struct ModRange {
+        size_t base;
+        size_t end;
+        std::string name;
+        size_t priv_kb = 0;
+        size_t shared_kb = 0;
+    };
+    std::vector<ModRange> mods;
+
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
+    if (snap != INVALID_HANDLE_VALUE) {
+        MODULEENTRY32W me = {};
+        me.dwSize = sizeof(me);
+        if (Module32FirstW(snap, &me)) {
+            do {
+                std::string name;
+                int len = WideCharToMultiByte(CP_UTF8, 0, me.szModule, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 1) {
+                    name.resize(len - 1);
+                    WideCharToMultiByte(CP_UTF8, 0, me.szModule, -1, &name[0], len, nullptr, nullptr);
+                }
+                size_t base = reinterpret_cast<size_t>(me.modBaseAddr);
+                mods.push_back({ base, base + me.modBaseSize, name, 0, 0 });
+            } while (Module32NextW(snap, &me));
+        }
+        CloseHandle(snap);
+    }
+    std::sort(mods.begin(), mods.end(), [](const ModRange& a, const ModRange& b) { return a.base < b.base; });
+
+    std::vector<PSAPI_WORKING_SET_BLOCK> pages;
+    if (!ProbeEnumerateWorkingSet(pages)) return;
+
+    size_t heap_priv_kb = 0, heap_shared_kb = 0;
+    for (const auto& p : pages) {
+        const bool is_private = !p.Shared;
+        const size_t addr = (size_t)(p.VirtualPage) << 12;
+        auto it = std::upper_bound(mods.begin(), mods.end(), addr,
+                                   [](size_t v, const ModRange& m) { return v < m.base; });
+        if (it != mods.begin()) {
+            ModRange& m = *(it - 1);
+            if (addr < m.end) {
+                if (is_private) m.priv_kb += 4; else m.shared_kb += 4;
+                continue;
+            }
+        }
+        if (is_private) heap_priv_kb += 4; else heap_shared_kb += 4;
+    }
+
+    std::sort(mods.begin(), mods.end(), [](const ModRange& a, const ModRange& b) {
+        return (a.priv_kb + a.shared_kb) > (b.priv_kb + b.shared_kb);
+    });
+    char buf[256];
+    snprintf(buf, sizeof(buf), "resident pages by module (private / shared) - top 8 of %zu modules:", mods.size());
+    ProbeLog(out, buf);
+    for (size_t i = 0; i < mods.size() && i < 8; ++i) {
+        snprintf(buf, sizeof(buf), "  %-30s %7.1f MB priv / %7.1f MB shared",
+                 mods[i].name.c_str(), mods[i].priv_kb / 1024.0, mods[i].shared_kb / 1024.0);
+        ProbeLog(out, buf);
+    }
+    snprintf(buf, sizeof(buf), "  %-30s %7.1f MB priv / %7.1f MB shared", "(heap/anon/driver)",
+             heap_priv_kb / 1024.0, heap_shared_kb / 1024.0);
+    ProbeLog(out, buf);
+}
+
+void ProbeLogSample(std::ofstream& out, const char* phase, int second) {
+    MemProbeSample s = ProbeSampleMemory();
+    char buf[256];
+    snprintf(buf, sizeof(buf), "phase=%s t=%ds privateWS=%.1fMB ws=%.1fMB privateCommit=%.1fMB peakWS=%.1fMB threads=%zu",
+             phase, second,
+             s.private_ws_kb / 1024.0, s.ws_kb / 1024.0, s.private_commit_kb / 1024.0,
+             s.peak_ws_kb / 1024.0, s.threads);
+    ProbeLog(out, buf);
+}
+
+// Trims the working set (exactly what the daemon does every 30 s and on panel
+// hide) and samples afterwards: this is the number Task Manager shows.
+void ProbeLogTrimmed(std::ofstream& out, const char* phase) {
+    TrimWorkingSetMemory();
+    Sleep(1200);
+    ProbeLogSample(out, phase, 0);
+}
+
+void ProbeRenderWallpaperFrame() {
+    std::lock_guard<std::mutex> lock(g_decoder_mutex);
+    if (g_decoder.DecodeNextFrame(g_current_frame) && g_current_frame.texture) {
+        UpdateTargetViewports(g_config.Get().target_displays);
+        g_presenter.RenderFrame(g_current_frame.texture, g_current_frame.texture_index,
+                                g_config.Get().scaling_mode, s_cached_target_vps, 0.0f);
+        g_presenter.Present(0);
+        g_frames_rendered++;
+    } else {
+        MsgWaitForMultipleObjects(0, nullptr, FALSE, 8, QS_ALLINPUT);
+    }
+}
+
+// Runs the engine loop for `seconds`, optionally rendering the settings panel,
+// logging one sample per second.
+void ProbeRunSeconds(int seconds, bool render_panel, std::ofstream& out, const char* phase) {
+    uint64_t start = GetTickCount64();
+    int last_second = -1;
+    while ((int)((GetTickCount64() - start) / 1000) < seconds) {
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
+        if (render_panel && SettingsUI::IsOpen()) {
+            HWND uiHwnd = SettingsUI::GetHwnd();
+            if (uiHwnd && !IsIconic(uiHwnd)) SettingsUI::RenderFrame();
+        }
+
+        if (g_clock.ShouldRenderFrame()) {
+            ProbeRenderWallpaperFrame();
+        } else {
+            DWORD sleepMs = g_clock.GetSleepDurationMs();
+            HANDLE waitable = g_presenter.GetWaitableObject();
+            if (waitable) {
+                DWORD waitTimeout = (sleepMs > 0 && sleepMs < 100) ? sleepMs : 16;
+                MsgWaitForMultipleObjectsEx(1, &waitable, waitTimeout, QS_ALLINPUT, MWMO_ALERTABLE);
+            } else if (sleepMs > 0) {
+                MsgWaitForMultipleObjects(0, nullptr, FALSE, sleepMs, QS_ALLINPUT);
+            }
+        }
+
+        int elapsed = (int)((GetTickCount64() - start) / 1000);
+        if (elapsed != last_second) {
+            last_second = elapsed;
+            ProbeLogSample(out, phase, elapsed);
+        }
+    }
+}
+
+} // namespace
+
+static int RunMemoryProbe(HINSTANCE hInstance, int seconds_per_phase) {
+    char exePathA[MAX_PATH] = {};
+    GetModuleFileNameA(nullptr, exePathA, MAX_PATH);
+    std::string reportPath = (fs::path(exePathA).parent_path() / "memprobe.txt").string();
+    std::ofstream out(reportPath, std::ios::trunc);
+    if (!out.is_open()) return 1;
+
+    timeBeginPeriod(1);
+
+    g_config.Load();
+    auto& cfg = g_config.Get();
+
+    size_t baseline = ProbeSampleMemory().private_ws_kb;
+    {
+        char buf[160];
+        snprintf(buf, sizeof(buf), "baseline (process start) privateWS=%.1fMB ws=%.1fMB", baseline / 1024.0, ProbeSampleMemory().ws_kb / 1024.0);
+        ProbeLog(out, buf);
+    }
+
+    WNDCLASSEXW wc = {};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = DefWindowProcW;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = L"MiniWallpaper_MemProbe";
+    RegisterClassExW(&wc);
+
+    int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    HWND probeHwnd = CreateWindowExW(0, wc.lpszClassName, L"MiniWallpaper mem probe", WS_POPUP,
+                                     0, 0, vw, vh, nullptr, nullptr, hInstance, nullptr);
+    if (!probeHwnd) {
+        ProbeLog(out, "FATAL: probe window creation failed");
+        return 1;
+    }
+
+    if (!g_presenter.Init(probeHwnd, vw, vh, cfg.gpu_device_index)) {
+        ProbeLog(out, "FATAL: presenter init failed");
+        return 1;
+    }
+    g_shared_engine_state.active_gpu_index.store(cfg.gpu_device_index);
+    g_shared_engine_state.SetActiveGpuInfo(g_presenter.GetAdapterName(), g_presenter.GetAdapterType());
+    ProbeLog(out, std::string("adapter: ") + g_presenter.GetAdapterName() + (g_presenter.IsSoftwareMode() ? "  [SOFTWARE MODE]" : "  [hardware decode]"));
+    ProbeLog(out, std::string("swapchain target: ") + std::to_string(vw) + "x" + std::to_string(vh));
+
+    std::string video = (!cfg.wallpapers.empty()) ? cfg.wallpapers[0].video_path : "";
+    if (!video.empty()) {
+        bool ok = OpenWallpaperVideo(video);
+        auto info = g_decoder.GetInfo();
+        char buf[512];
+        snprintf(buf, sizeof(buf), "video: %s (%dx%d @ %.1f fps, hw=%s, open=%s)",
+                 video.c_str(), info.width, info.height, info.fps,
+                 g_decoder_hw ? "yes" : "no", ok ? "yes" : "no");
+        ProbeLog(out, buf);
+    } else {
+        ProbeLog(out, "video: NONE configured - measuring idle engine only");
+    }
+
+    g_governor.Init(probeHwnd);
+    g_ipc.Start(OnIpcRequest);
+    ThumbnailManager::Instance(); // same worker thread Config::Load would have spawned
+
+    if (!cfg.wallpapers.empty() && cfg.wallpapers[0].audio_enabled && cfg.wallpapers[0].volume > 0.0f) {
+        g_audio.SetVolume(cfg.wallpapers[0].volume);
+        g_audio.Init();
+        ProbeLog(out, "audio: WASAPI mixer thread enabled (per config)");
+    }
+
+    ProbeLog(out, "=== phase 1 / 6: BACKGROUND (panel closed, video playing) ===");
+    ProbeRunSeconds(seconds_per_phase, false, out, "background");
+    ProbeLogTopModules(out);
+    ProbeLogTrimmed(out, "background-trimmed");
+
+    ProbeLog(out, "=== phase 2 / 6: SETTINGS PANEL OPEN (idle browsing) ===");
+    SettingsUI::Open(hInstance);
+    ProbeRunSeconds(seconds_per_phase, true, out, "panel-open");
+    ProbeLogTopModules(out);
+    ProbeLogTrimmed(out, "panel-open-trimmed");
+    {
+        int tw = 0, th = 0;
+        SettingsUI::GetFontAtlasSize(tw, th);
+        char buf[160];
+        snprintf(buf, sizeof(buf), "font atlas: %dx%d (%d KB RGBA, CPU+GPU)", tw, th, (tw * th * 4) / 1024);
+        ProbeLog(out, buf);
+    }
+
+    ProbeLog(out, "=== phase 3 / 6: PANEL CLOSED AGAIN ===");
+    SettingsUI::Close();
+    ProbeRunSeconds(seconds_per_phase, false, out, "panel-closed");
+    ProbeLogTrimmed(out, "panel-closed-trimmed");
+
+    ProbeLog(out, "=== phase 4 / 6: OPEN/CLOSE x5 (leak check) ===");
+    for (int cycle = 0; cycle < 5; ++cycle) {
+        SettingsUI::Open(hInstance);
+        ProbeRunSeconds(1, true, out, "cycle-open");
+        SettingsUI::Close();
+        ProbeRunSeconds(1, false, out, "cycle-closed");
+        ProbeLogTrimmed(out, "cycle-closed-trimmed");
+    }
+
+    // Phases 5-6 exercise the real deep-suspend path exactly as the daemon runs
+    // it (Gaming Auto-Sleep / pause): the decoder is released completely and the
+    // playback position is remembered for the resume seek.
+    ProbeLog(out, "=== phase 5 / 6: DEEP SUSPEND, PANEL CLOSED (decoder released) ===");
+    {
+        double duration = g_cached_video_info.duration_seconds;
+        double probe_pos = duration > 1.0 ? duration * 0.4 : 4.0;
+        g_shared_engine_state.current_time_sec.store(probe_pos);
+        int64_t pts_before = g_current_frame.pts;
+        EnterDeepSuspend();
+        auto info = g_decoder.GetInfo();
+        char buf[320];
+        snprintf(buf, sizeof(buf),
+                 "deep suspend: saved position=%.1fs, frame pts_before=%lld, decoder after release: %dx%d open=%s",
+                 probe_pos, (long long)pts_before, info.width, info.height,
+                 (info.width > 0) ? "yes" : "no (released)");
+        ProbeLog(out, buf);
+    }
+    ProbeRunSeconds(seconds_per_phase, false, out, "deep-suspend");
+    ProbeLogTopModules(out);
+    ProbeLogTrimmed(out, "deep-suspend-trimmed");
+
+    ProbeLog(out, "=== phase 6 / 6: DEEP SUSPEND + SETTINGS PANEL OPEN ===");
+    SettingsUI::Open(hInstance);
+    ProbeRunSeconds(seconds_per_phase, true, out, "deep-suspend-panel");
+    ProbeLogTrimmed(out, "deep-suspend-panel-trimmed");
+    SettingsUI::Close();
+
+    ProbeLog(out, "=== resume from deep suspend (reopen decoder + seek back) ===");
+    uint64_t frames_before_resume = g_frames_rendered;
+    {
+        LeaveDeepSuspend();
+        auto info = g_decoder.GetInfo();
+        ProbeRenderWallpaperFrame(); // decode one frame to inspect where decoding resumed
+        char buf[320];
+        snprintf(buf, sizeof(buf),
+                 "resume: decoder %dx%d open=%s, resumed frame pts=%lld",
+                 info.width, info.height, (info.width > 0) ? "yes" : "no",
+                 (long long)g_current_frame.pts);
+        ProbeLog(out, buf);
+    }
+    ProbeRunSeconds(seconds_per_phase, false, out, "resumed");
+    ProbeLogTrimmed(out, "resumed-trimmed");
+    {
+        char buf[192];
+        snprintf(buf, sizeof(buf), "resume check: %llu frames rendered during the resumed phase",
+                 (unsigned long long)(g_frames_rendered - frames_before_resume));
+        ProbeLog(out, buf);
+    }
+
+    {
+        MemProbeSample s = ProbeSampleMemory();
+        char buf[256];
+        snprintf(buf, sizeof(buf), "FINAL: privateWS=%.1fMB ws=%.1fMB privateCommit=%.1fMB peakWS=%.1fMB threads=%zu",
+                 s.private_ws_kb / 1024.0, s.ws_kb / 1024.0, s.private_commit_kb / 1024.0, s.peak_ws_kb / 1024.0, s.threads);
+        ProbeLog(out, buf);
+    }
+
+    g_ipc.Stop();
+    g_audio.Stop();
+    {
+        std::lock_guard<std::mutex> lock(g_decoder_mutex);
+        g_decoder.Close();
+    }
+    g_presenter.Cleanup();
+    DestroyWindow(probeHwnd);
+    UnregisterClassW(wc.lpszClassName, hInstance);
+    timeEndPeriod(1);
+
+    ProbeLog(out, "done - report written to memprobe.txt");
+    return 0;
+}
+
+// Recreate the renderer's D3D11 device on another adapter. Must run on the
+// main thread: the settings panel shares the daemon device, so it is closed
+// before the old device goes away and re-opened afterwards.
+static void ReinitRendererDevice(int gpu_idx) {
+    bool ui_was_open = SettingsUI::IsOpen();
+    SettingsUI::Shutdown();
+
+    auto& cfg = g_config.Get();
+    std::string current_video = (!cfg.wallpapers.empty()) ? cfg.wallpapers[0].video_path : "";
+
+    {
+        std::lock_guard<std::mutex> lock(g_decoder_mutex);
+        g_decoder.Close();
+        g_current_frame = VideoFrame{};
+        g_loaded_video_path.clear();
+
+        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        g_presenter.Cleanup();
+        g_presenter.Init(g_main_hwnd, vw, vh, gpu_idx);
+
+        g_decoder.SetForceSoftware(gpu_idx == -1);
+        if (!current_video.empty()) {
+            bool audio_on = !cfg.wallpapers.empty() && cfg.wallpapers[0].audio_enabled && (cfg.wallpapers[0].volume > 0.0f);
+            g_decoder.SetAudioEnabled(audio_on);
+            g_decoder.Open(current_video.c_str(), g_presenter.GetDevice(), vw, vh);
+            g_loaded_video_path = current_video;
+            g_decoder_hw = g_decoder.IsHWAccelerated();
+            g_clock.Reset();
+        }
+        g_shared_engine_state.active_gpu_index.store(gpu_idx);
+        g_shared_engine_state.hw_decode.store(g_decoder_hw);
+        g_shared_engine_state.SetActiveGpuInfo(g_presenter.GetAdapterName(), g_presenter.GetAdapterType());
+        g_shared_engine_state.vram_mb.store(g_presenter.GetVramUsageMB());
+    }
+
+    if (ui_was_open) SettingsUI::Open(GetModuleHandleW(nullptr));
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_APP_OPEN_SETTINGS) {
         SettingsUI::Open(GetModuleHandleW(nullptr));
+        return 0;
+    }
+
+    if (msg == WM_APP_SET_RENDER_DEVICE) {
+        ReinitRendererDevice((int)wParam - 1);
         return 0;
     }
 
@@ -1500,6 +2050,7 @@ std::string OnIpcRequest(const std::string& request_json) {
             // auto-paused (Gaming Auto-Sleep / fullscreen / etc). Rendering stays
             // governed, and deep suspend re-releases decoder VRAM until the system
             // load clears - then the chosen wallpaper starts playing automatically.
+            g_suspend_resume_position_sec = -1.0; // explicit selection: always start from the beginning
             bool ok = OpenWallpaperVideo(path);
             if (ok) {
                 if (g_fullscreen_paused) {
@@ -1599,6 +2150,10 @@ std::string OnIpcRequest(const std::string& request_json) {
         }
         std::lock_guard<std::mutex> lock(g_decoder_mutex);
         auto info = g_decoder.GetInfo();
+        if (info.duration_seconds <= 0.0 && info.width <= 0) {
+            // Decoder released by deep suspend: report the last known video info
+            info = g_cached_video_info;
+        }
         auto& cfg = g_config.Get();
         std::string current_video = (!cfg.wallpapers.empty()) ? cfg.wallpapers[0].video_path : "";
         return nlohmann::json{
@@ -1652,6 +2207,9 @@ std::string OnIpcRequest(const std::string& request_json) {
         g_decoder.Close();
         g_current_frame = VideoFrame{};
         g_loaded_video_path.clear();
+        g_cached_video_info = VideoInfo{};
+        g_suspend_resume_position_sec = -1.0;
+        g_shared_engine_state.current_time_sec.store(0.0);
         g_paused = true;
         SetVideoPacing(0.0);
         auto& cfg = g_config.Get();
@@ -1689,33 +2247,11 @@ std::string OnIpcRequest(const std::string& request_json) {
         auto& cfg = g_config.Get();
         cfg.gpu_device_index = gpu_idx;
         g_config.Save();
-
-        std::string current_video = (!cfg.wallpapers.empty()) ? cfg.wallpapers[0].video_path : "";
-
-        {
-            std::lock_guard<std::mutex> lock(g_decoder_mutex);
-            g_decoder.Close();
-            g_current_frame = VideoFrame{};
-            g_loaded_video_path.clear();
-
-            int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-            int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            g_presenter.Cleanup();
-            g_presenter.Init(g_main_hwnd, vw, vh, gpu_idx);
-
-            g_decoder.SetForceSoftware(gpu_idx == -1);
-            if (!current_video.empty()) {
-                bool audio_on = !cfg.wallpapers.empty() && cfg.wallpapers[0].audio_enabled && (cfg.wallpapers[0].volume > 0.0f);
-                g_decoder.SetAudioEnabled(audio_on);
-                g_decoder.Open(current_video.c_str(), g_presenter.GetDevice(), vw, vh);
-                g_loaded_video_path = current_video;
-                g_decoder_hw = g_decoder.IsHWAccelerated();
-                g_clock.Reset();
-            }
-            g_shared_engine_state.active_gpu_index.store(gpu_idx);
-            g_shared_engine_state.hw_decode.store(g_decoder_hw);
-            g_shared_engine_state.SetActiveGpuInfo(g_presenter.GetAdapterName(), g_presenter.GetAdapterType());
-            g_shared_engine_state.vram_mb.store(g_presenter.GetVramUsageMB());
+        // Device teardown/re-creation runs on the main thread (see
+        // WM_APP_SET_RENDER_DEVICE) so it can safely close and re-open the
+        // settings panel that shares the device.
+        if (g_main_hwnd) {
+            PostMessageW(g_main_hwnd, WM_APP_SET_RENDER_DEVICE, (WPARAM)(gpu_idx + 1), 0);
         }
         return "{\"ok\":true}";
     } else if (cmd == "set_target_displays") {

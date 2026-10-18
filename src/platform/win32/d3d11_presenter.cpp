@@ -5,6 +5,14 @@
 
 namespace miniwp {
 
+// Process-wide shared device registration (see d3d11_presenter.h). Non-owning:
+// the presenter is the sole owner of the device/context lifetime.
+static ID3D11Device*        g_shared_device = nullptr;
+static ID3D11DeviceContext* g_shared_context = nullptr;
+
+ID3D11Device* GetSharedD3DDevice() { return g_shared_device; }
+ID3D11DeviceContext* GetSharedD3DDeviceContext() { return g_shared_context; }
+
 struct ScalingData {
     float uv_scale[2];
     float uv_offset[2];
@@ -101,6 +109,11 @@ bool D3D11Presenter::Init(HWND hwnd, int width, int height, int gpu_index) {
     m_hwnd = hwnd;
     m_width = width;
     m_height = height;
+
+    // The device is (re)created below; un-publish the old one right away so the
+    // settings panel can never attach a swap chain to a stale device.
+    g_shared_device = nullptr;
+    g_shared_context = nullptr;
 
     if (gpu_index == -1) {
         m_is_software_mode = true;
@@ -221,6 +234,11 @@ bool D3D11Presenter::Init(HWND hwnd, int width, int height, int gpu_index) {
     if (FAILED(hr)) {
         return false;
     }
+
+    // Publish the freshly created device so the settings panel can share it
+    // instead of creating a second D3D11 device of its own.
+    g_shared_device = m_device.Get();
+    g_shared_context = m_context.Get();
 
     // Query and cache active adapter details
     {
@@ -760,6 +778,8 @@ void D3D11Presenter::Flush() {
 }
 
 void D3D11Presenter::Cleanup() {
+    g_shared_device = nullptr;
+    g_shared_context = nullptr;
     ResetStartFrame();
     m_capture_staging_texture.Reset();
     m_capture_width = 0;

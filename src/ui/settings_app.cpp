@@ -22,6 +22,9 @@
 #include <iostream>
 #include <algorithm>
 #include <thread>
+#include <deque>
+#include <mutex>
+#include <condition_variable>
 #include <cmath>
 #include <unordered_map>
 
@@ -34,6 +37,7 @@
 #include "core/ipc_server.h"
 #include "core/engine_state.h"
 #include "core/video_optimizer.h"
+#include "platform/win32/d3d11_presenter.h"
 #include "platform/win32/hardware_info.h"
 #include "platform/win32/lockscreen_manager.h"
 #include "thumbnail_manager.h"
@@ -60,6 +64,9 @@ static ID3D11DeviceContext*     g_pd3dDeviceContext = nullptr;
 static IDXGISwapChain*          g_pSwapChain = nullptr;
 static ID3D11RenderTargetView*  g_mainRenderTargetView = nullptr;
 static bool                     g_isOpen = false;
+static bool                     g_ownsD3DDevice = false;   // false when the device is shared with the daemon
+static bool                     g_inRenderFrame = false;   // guards deferred teardown while a frame is in flight
+static bool                     g_closeRequested = false;  // Close() was called during RenderFrame()
 
 // Hardware telemetry cache
 static SystemHardwareInfo       g_hardwareInfo;
@@ -214,6 +221,82 @@ static void CleanupRenderTarget() {
 }
 
 static bool CreateDeviceD3D(HWND hWnd) {
+    // Prefer the daemon's shared device: creating a second D3D11 device + driver
+    // allocation just for the panel costs several MB of private working set.
+    ID3D11Device* sharedDevice = GetSharedD3DDevice();
+    ID3D11DeviceContext* sharedContext = GetSharedD3DDeviceContext();
+
+    if (sharedDevice && sharedContext) {
+        g_pd3dDevice = sharedDevice;
+        g_pd3dDevice->AddRef();
+        g_pd3dDeviceContext = sharedContext;
+        g_pd3dDeviceContext->AddRef();
+        g_ownsD3DDevice = false;
+
+        ComPtr<IDXGIDevice> dxgiDevice;
+        ComPtr<IDXGIAdapter> adapter;
+        ComPtr<IDXGIFactory> factory;
+        if (SUCCEEDED(g_pd3dDevice->QueryInterface(IID_PPV_ARGS(&dxgiDevice))) &&
+            SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) &&
+            SUCCEEDED(adapter->GetParent(IID_PPV_ARGS(&factory)))) {
+
+            // Use the flip model when available: its back buffers live in video
+            // memory, while the legacy BitBlt (DISCARD) model is backed by system
+            // memory, costing an extra ~2 * W * H * 4 bytes of private working set.
+            ComPtr<IDXGIFactory2> factory2;
+            if (SUCCEEDED(factory.As(&factory2))) {
+                DXGI_SWAP_CHAIN_DESC1 sd1 = {};
+                sd1.Width = 0;
+                sd1.Height = 0;
+                sd1.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+                sd1.Stereo = FALSE;
+                sd1.SampleDesc.Count = 1;
+                sd1.SampleDesc.Quality = 0;
+                sd1.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+                sd1.BufferCount = 2;
+                sd1.Scaling = DXGI_SCALING_STRETCH;
+                sd1.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+                sd1.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+                sd1.Flags = 0;
+
+                ComPtr<IDXGISwapChain1> sc1;
+                if (SUCCEEDED(factory2->CreateSwapChainForHwnd(g_pd3dDevice, hWnd, &sd1, nullptr, nullptr, &sc1))) {
+                    g_pSwapChain = sc1.Detach();
+                    factory2->MakeWindowAssociation(hWnd, DXGI_MWA_NO_ALT_ENTER);
+                    CreateRenderTarget();
+                    return true;
+                }
+            }
+
+            // Fallback: legacy BitBlt swap chain (Windows 7 SP1+).
+            DXGI_SWAP_CHAIN_DESC sd = {};
+            sd.BufferCount = 2;
+            sd.BufferDesc.Width = 0;
+            sd.BufferDesc.Height = 0;
+            sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            sd.BufferDesc.RefreshRate.Numerator = 60;
+            sd.BufferDesc.RefreshRate.Denominator = 1;
+            sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+            sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+            sd.OutputWindow = hWnd;
+            sd.SampleDesc.Count = 1;
+            sd.SampleDesc.Quality = 0;
+            sd.Windowed = TRUE;
+            sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+            if (SUCCEEDED(factory->CreateSwapChain(g_pd3dDevice, &sd, &g_pSwapChain))) {
+                CreateRenderTarget();
+                return true;
+            }
+        }
+
+        // Shared device path failed: fall back to a private device below.
+        g_pd3dDeviceContext->Release();
+        g_pd3dDeviceContext = nullptr;
+        g_pd3dDevice->Release();
+        g_pd3dDevice = nullptr;
+    }
+
     DXGI_SWAP_CHAIN_DESC sd = {};
     sd.BufferCount = 2;
     sd.BufferDesc.Width = 0;
@@ -252,6 +335,7 @@ static bool CreateDeviceD3D(HWND hWnd) {
         return false;
     }
 
+    g_ownsD3DDevice = true;
     CreateRenderTarget();
     return true;
 }
@@ -259,15 +343,56 @@ static bool CreateDeviceD3D(HWND hWnd) {
 static void CleanupDeviceD3D() {
     CleanupRenderTarget();
     if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
+    // When the device is shared with the daemon we only drop our references;
+    // a private device (screenshot/standalone mode) is fully released.
     if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = nullptr; }
     if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = nullptr; }
+    g_ownsD3DDevice = false;
 }
 
+// Fire-and-forget IPC to the daemon. Uses one long-lived worker thread instead
+// of spawning (and reserving ~1 MB of stack for) a throw-away thread per call.
+namespace {
+struct IpcAsyncQueue {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::deque<std::string> items;
+    bool stop = false;
+    std::thread worker;
+
+    IpcAsyncQueue() {
+        worker = std::thread([this]() {
+            for (;;) {
+                std::string request;
+                {
+                    std::unique_lock<std::mutex> lock(mutex);
+                    cv.wait(lock, [this]() { return stop || !items.empty(); });
+                    if (stop && items.empty()) return;
+                    request = std::move(items.front());
+                    items.pop_front();
+                }
+                IpcClient client;
+                client.SendRequest(request);
+            }
+        });
+    }
+};
+
+IpcAsyncQueue& GetIpcAsyncQueue() {
+    // Intentionally leaked: the worker is a process-lifetime service, so it must
+    // outlive static destructors registered by other translation units.
+    static IpcAsyncQueue* s_queue = new IpcAsyncQueue();
+    return *s_queue;
+}
+} // namespace
+
 static void SendIpcAsync(const std::string& request_json) {
-    std::thread([request_json]() {
-        IpcClient client;
-        client.SendRequest(request_json);
-    }).detach();
+    IpcAsyncQueue& q = GetIpcAsyncQueue();
+    {
+        std::lock_guard<std::mutex> lock(q.mutex);
+        q.items.push_back(request_json);
+    }
+    q.cv.notify_one();
 }
 
 static void ApplyAction(std::string utf8_path, std::string action) {
@@ -1594,6 +1719,24 @@ static void RenderGalleryTab() {
 
     for (size_t i = 0; i < galleryCopy.size(); ++i) {
         const auto& path = galleryCopy[i];
+
+        // Culling: cards outside the visible scroll window only advance the
+        // layout — no ffprobe, no filesystem stats, no thumbnail uploads.
+        {
+            const float cull_scroll_y = ImGui::GetScrollY();
+            const float cull_view_h = ImGui::GetWindowHeight();
+            const float cull_card_y = ImGui::GetCursorPosY();
+            const float cull_pad = 80.0f;
+            if (cull_card_y + cardHeight < cull_scroll_y - cull_pad ||
+                cull_card_y > cull_scroll_y + cull_view_h + cull_pad) {
+                ImGui::Dummy(ImVec2(cardWidth, cardHeight));
+                bool cull_last_in_row = ((i + 1) % numCols == 0) || (i + 1 >= galleryCopy.size());
+                if (!cull_last_in_row) ImGui::SameLine(0, spacingX);
+                else ImGui::Dummy(ImVec2(1.0f, spacingY));
+                continue;
+            }
+        }
+
         fs::path p(path);
         std::string filename = p.filename().string();
         if (filename.empty()) filename = path;
@@ -3667,8 +3810,8 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
     if (dpiScale > 1.01f) ImGui::GetStyle().ScaleAllSizes(dpiScale);
 
     ImFontConfig main_cfg;
-    main_cfg.OversampleH = 3;
-    main_cfg.OversampleV = 3;
+    main_cfg.OversampleH = 2;
+    main_cfg.OversampleV = 2;
     main_cfg.RasterizerMultiply = 1.12f;
     ImFont* mainFont = nullptr;
     if (fs::exists("C:\\Windows\\Fonts\\segoeui.ttf")) {
@@ -3684,13 +3827,23 @@ bool SettingsUI::Open(HINSTANCE hInstance) {
         io.Fonts->AddFontDefault();
     }
 
-    static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+    // Only the icon codepoints this app actually draws are registered. The full
+    // FontAwesome plane (0xE000..0xF8FF) is ~1,400 glyphs; a legacy font atlas
+    // would rasterize every one of them into CPU + GPU memory.
+    static const ImWchar icons_ranges[] = {
+        0xf002, 0xf008, 0xf00c, 0xf00d, 0xf013, 0xf019, 0xf021, 0xf023,
+        0xf028, 0xf030, 0xf03e, 0xf04b, 0xf04c, 0xf04d, 0xf058, 0xf05a,
+        0xf05b, 0xf065, 0xf067, 0xf070, 0xf071, 0xf07b, 0xf07c, 0xf085,
+        0xf0a0, 0xf0c7, 0xf0e7, 0xf108, 0xf144, 0xf1de, 0xf1f8, 0xf201,
+        0xf242, 0xf2db, 0xf302, 0xf4c2, 0xf51f, 0xf5fe, 0xf625, 0xf6a9,
+        0
+    };
     ImFontConfig icons_config;
     icons_config.MergeMode = true;
     icons_config.PixelSnapH = true;
     icons_config.GlyphMinAdvanceX = 16.0f;
-    icons_config.OversampleH = 3;
-    icons_config.OversampleV = 3;
+    icons_config.OversampleH = 2;
+    icons_config.OversampleV = 2;
 
     char exePath[MAX_PATH] = {};
     GetModuleFileNameA(nullptr, exePath, MAX_PATH);
@@ -3924,8 +4077,28 @@ static void RenderCustomTitleBar(float winWidth, float titleBarH) {
     ImGui::SetCursorScreenPos(ImVec2(origin.x, origin.y + titleBarH));
 }
 
+// Fully release every resource owned by the panel (defined after RenderFrame).
+static void ReleaseUiStack();
+
+namespace {
+// RAII guard: marks that a frame is being built (Close() must defer teardown
+// until the frame is done) and flushes a deferred close on exit.
+struct UiFrameScope {
+    UiFrameScope() { g_inRenderFrame = true; }
+    ~UiFrameScope() {
+        g_inRenderFrame = false;
+        if (g_closeRequested) {
+            g_closeRequested = false;
+            ReleaseUiStack();
+        }
+    }
+};
+} // namespace
+
 void SettingsUI::RenderFrame() {
     if (!g_isOpen || !g_hWnd || !IsWindowVisible(g_hWnd) || IsIconic(g_hWnd) || !g_pd3dDeviceContext || !g_mainRenderTargetView) return;
+
+    UiFrameScope frameScope;
 
     FetchDaemonStatus();
     ThumbnailManager::Instance().Update(g_pd3dDevice);
@@ -4029,26 +4202,34 @@ void SettingsUI::RenderFrame() {
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
     g_pSwapChain->Present(1, 0);
+
+    // One-shot diagnostic: how big did the ImGui font atlas actually get?
+    static bool s_atlasLogged = false;
+    if (!s_atlasLogged) {
+        s_atlasLogged = true;
+        int tw = 0, th = 0;
+        SettingsUI::GetFontAtlasSize(tw, th);
+        Logger::Info("[UI] ImGui font atlas: ", tw, "x", th, " (", (tw * th * 4) / 1024, " KB CPU-side RGBA)");
+    }
 }
 
 bool SettingsUI::IsOpen() {
     return g_isOpen && g_hWnd && IsWindowVisible(g_hWnd);
 }
 
-void SettingsUI::Close() {
-    if (g_hWnd) {
-        ShowWindow(g_hWnd, SW_HIDE);
+// Fully release every resource owned by the panel: OLE drop target, ImGui
+// context + font atlas, thumbnail textures, swap chain (and the private D3D11
+// device when we own it) and the window itself. Both Close() (panel sent to
+// tray) and Shutdown() (app exit) go through here, so a closed panel costs the
+// daemon ~0 MB instead of keeping the whole UI stack resident.
+static void ReleaseUiStack() {
+    if (!g_hWnd && !g_pd3dDevice && !g_pSwapChain && !ImGui::GetCurrentContext()) {
+        SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+        return;
     }
-    g_isOpen = false;
-    ThumbnailManager::Instance().ReleaseTextures();
-    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
-}
-
-void SettingsUI::Shutdown() {
-    if (!g_hWnd) return;
 
     if (g_dropTarget) {
-        RevokeDragDrop(g_hWnd);
+        if (g_hWnd) RevokeDragDrop(g_hWnd);
         g_dropTarget->Release();
         g_dropTarget = nullptr;
     }
@@ -4059,10 +4240,19 @@ void SettingsUI::Shutdown() {
 
     ThumbnailManager::Instance().ReleaseTextures();
     g_appLogoSRV.Reset();
+    g_captureModalPreviewSRV.Reset();
+    g_captureModalPreviewPending.store(false);
+    // Only safe to release the preview pixel buffer when no extract worker owns it.
+    if (!g_captureModalPreviewWorkerActive.load()) {
+        std::vector<uint8_t>().swap(g_captureModalPreviewBgra);
+    }
 
-    ImGui_ImplDX11_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext();
+    if (ImGui::GetCurrentContext()) {
+        ImGui_ImplDX11_Shutdown();
+        ImGui_ImplWin32_Shutdown();
+        ImGui::DestroyContext();
+    }
+    g_fontSemibold = nullptr;
 
     CleanupDeviceD3D();
 
@@ -4071,6 +4261,27 @@ void SettingsUI::Shutdown() {
         UnregisterClassW(L"MiniWallpaper_SettingsClass", g_hInstance);
         g_hWnd = nullptr;
     }
+
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+}
+
+void SettingsUI::Close() {
+    if (!g_hWnd) {
+        g_isOpen = false;
+        return;
+    }
+    if (g_inRenderFrame) {
+        // Called from the custom title bar close button while a frame is being
+        // built: tear down at the end of RenderFrame(), never mid-frame.
+        g_closeRequested = true;
+        g_isOpen = false;
+        return;
+    }
+    ReleaseUiStack();
+}
+
+void SettingsUI::Shutdown() {
+    ReleaseUiStack();
 }
 
 HWND SettingsUI::GetHwnd() {
@@ -4085,6 +4296,17 @@ void SettingsUI::SetActivePage(int page) {
 
 int SettingsUI::GetActivePage() {
     return g_activePage;
+}
+
+void SettingsUI::GetFontAtlasSize(int& width, int& height) {
+    width = 0;
+    height = 0;
+    if (!ImGui::GetCurrentContext()) return;
+    ImFontAtlas* atlas = ImGui::GetIO().Fonts;
+    if (atlas && atlas->TexData) {
+        width = atlas->TexData->Width;
+        height = atlas->TexData->Height;
+    }
 }
 
 bool SettingsUI::SaveScreenshot(const std::string& path) {
