@@ -1,73 +1,61 @@
 cmake_minimum_required(VERSION 3.20)
-project(MiniWallpaper VERSION 2.0.0 LANGUAGES CXX RC)
+project(LiteWallpaperMF VERSION 0.1.0 LANGUAGES CXX RC)
+
+if(NOT WIN32)
+    message(FATAL_ERROR "LiteWallpaper-MF builds on Windows 10/11 only")
+endif()
+if(NOT MSVC)
+    message(FATAL_ERROR "LiteWallpaper-MF requires the Visual Studio C++ toolchain")
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-# === Performance flags ===
-if(MSVC)
-    # Optimize for size and performance, disable RTTI
-    add_compile_options(/O2 /Oi /Gy /GL /GR- /EHsc /std:c++20 /W3 /utf-8)
-    add_link_options(/LTCG /OPT:REF /OPT:ICF)
-else()
-    add_compile_options(-O3 -flto -fno-exceptions -fno-rtti -std=c++20)
-endif()
-
-# === Dependencies via vcpkg ===
-find_package(nlohmann_json CONFIG REQUIRED)
-find_package(mimalloc CONFIG REQUIRED)
-find_package(imgui CONFIG REQUIRED)
-
-# === FFmpeg (manual find or bundled) ===
-set(FFMPEG_DIR "${CMAKE_SOURCE_DIR}/third_party/ffmpeg" CACHE PATH "FFmpeg root directory")
-set(FFMPEG_INCLUDE_DIR "${FFMPEG_DIR}/include")
-set(FFMPEG_LIB_DIR "${FFMPEG_DIR}/lib")
-
-# === Unified Single Executable ===
-add_executable(MiniWallpaper WIN32
+add_executable(LiteWallpaperMF WIN32
     src/main.cpp
     src/core/config.cpp
     src/core/playback_clock.cpp
-    src/core/ipc_server.cpp
-    src/core/engine_state.cpp
-    src/core/video_optimizer.cpp
-    src/decoder/ffmpeg_hw_decoder.cpp
-    src/decoder/audio_player.cpp
+    src/decoder/mf_decoder.cpp
     src/platform/win32/desktop_injector.cpp
     src/platform/win32/d3d11_presenter.cpp
     src/platform/win32/power_governor.cpp
-    src/platform/win32/lockscreen_manager.cpp
     src/platform/win32/tray_icon.cpp
-    src/platform/win32/hardware_info.cpp
-    src/ui/settings_app.cpp
-    src/ui/thumbnail_manager.cpp
     src/app.rc
 )
 
-target_include_directories(MiniWallpaper PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/third_party
-    ${FFMPEG_INCLUDE_DIR}
+target_include_directories(LiteWallpaperMF PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(LiteWallpaperMF PRIVATE
+    UNICODE
+    _UNICODE
+    _WIN32_WINNT=0x0A00
+    WINVER=0x0A00
+    WIN32_LEAN_AND_MEAN
+    NOMINMAX
 )
 
-target_link_directories(MiniWallpaper PRIVATE ${FFMPEG_LIB_DIR})
-
-target_link_libraries(MiniWallpaper PRIVATE
-    nlohmann_json::nlohmann_json
-    mimalloc
-    imgui::imgui
-    # FFmpeg libs
-    avcodec avformat avutil swscale swresample
-    # Windows system libs
-    d3d11 dxgi d3dcompiler
-    dwmapi user32 gdi32 shell32 ole32 uuid
-    winmm wtsapi32 psapi comdlg32 advapi32 imm32 windowsapp
+target_compile_options(LiteWallpaperMF PRIVATE
+    /O1 /Oi /Gy /GL /GR- /EHsc /W4 /utf-8
+)
+target_link_options(LiteWallpaperMF PRIVATE
+    /LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO
 )
 
-# Automatically generate MiniWallpaper.scr companion screensaver binary
-add_custom_command(TARGET MiniWallpaper POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "$<TARGET_FILE:MiniWallpaper>"
-    "$<TARGET_FILE_DIR:MiniWallpaper>/MiniWallpaper.scr"
-    COMMENT "Creating MiniWallpaper.scr screensaver binary"
+target_link_libraries(LiteWallpaperMF PRIVATE
+    d3d11
+    dxgi
+    mfplat
+    mfreadwrite
+    mfuuid
+    dwmapi
+    user32
+    shell32
+    ole32
+    uuid
+    wtsapi32
+    advapi32
+)
+
+set_target_properties(LiteWallpaperMF PROPERTIES
+    OUTPUT_NAME "LiteWallpaper-MF"
 )

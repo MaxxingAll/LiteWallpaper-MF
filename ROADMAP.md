@@ -10,7 +10,7 @@ from the system: VP9 / AV1 / HEVC Video Extensions and Web Media Extensions.
 Keep the parts upstream already does well:
 
 - WorkerW desktop injection (`desktop_injector`)
-- Zero-copy D3D11 NV12 → RGB presenter (`d3d11_presenter`, `shaders/`)
+- Zero-copy D3D11 NV12 video-processor presenter (`d3d11_presenter`)
 - Power governor (pause on fullscreen, maximized, lock and battery)
 
 ## Targets
@@ -34,7 +34,7 @@ The reference test clip is a 1080p30 VP9 WebM with Opus audio, 8 s.
 
 - [ ] Build upstream locally (VS 2022 + vcpkg) and record a baseline:
       RAM, VRAM, CPU, disk, and cold start-up time with the reference clip.
-- [ ] Add `docs/BENCHMARK.md` with the method, so later phases measure the same way.
+- [x] Add `docs/BENCHMARK.md` with the method, so later phases measure the same way.
 
 **Done when** the baseline numbers are committed.
 
@@ -43,7 +43,7 @@ The reference test clip is a 1080p30 VP9 WebM with Opus audio, 8 s.
 The decoder already sits behind `IVideoDecoder` (`src/decoder/video_decoder.h`),
 so this is a drop-in second implementation.
 
-- [ ] `src/decoder/mf_decoder.{h,cpp}` : `class MFDecoder : public IVideoDecoder`
+- [x] `src/decoder/mf_decoder.{h,cpp}` : `class MFDecoder : public IVideoDecoder`
   - `MFStartup`. Create `IMFDXGIDeviceManager`, then `ResetDevice(d3d_device)`.
     Turn on multithread protection on the D3D11 device.
   - `MFCreateSourceReaderFromURL` with these attributes:
@@ -62,9 +62,8 @@ so this is a drop-in second implementation.
     - codec from the `MF_MT_SUBTYPE` of the native type
   - On a missing codec (`MF_E_TOPO_CODEC_NOT_FOUND` / `MF_E_INVALIDMEDIATYPE`),
     report a clear error that names the Store extension to install.
-- [ ] Choose the backend in CMake with `MINIWP_DECODER=MF|FFMPEG`. Default to `MF`.
-      Keep FFmpeg buildable until Phase 2 lands.
-- [ ] Check that the presenter's shader handles MF texture arrays.
+- [x] Use MF by default while FFmpeg remained, then retire the selector with Phase 2.
+- [x] Check that the presenter handles MF texture arrays.
       The subresource index comes from `IMFDXGIBuffer`.
 
 **Done when** the reference WebM loops seamlessly on the desktop through MF,
@@ -73,40 +72,39 @@ and the FFmpeg DLLs are absent.
 
 ## Phase 2 — Remove FFmpeg completely
 
-- [ ] Delete `ffmpeg_hw_decoder.*`. Remove every `sws_*` / `swr_*` / `av*` use.
-- [ ] Delete `core/video_optimizer.*`, the 4K→1080p re-encoder. It needs FFmpeg encoders.
+- [x] Delete `ffmpeg_hw_decoder.*`. Remove every `sws_*` / `swr_*` / `av*` use.
+- [x] Delete `core/video_optimizer.*`, the 4K→1080p re-encoder. It needs FFmpeg encoders.
       Document a one-line `ffmpeg` command in the README instead.
-- [ ] Audio: drop it from the default build. Wallpapers are muted.
+- [x] Audio: drop it from the default build. Wallpapers are muted.
       Optional later: a second MF source reader → PCM → WASAPI (no swresample).
-- [ ] Thumbnails (`ui/thumbnail_manager`): use `IShellItemImageFactory`,
-      Explorer's own thumbnail cache. This drops the swscale path.
-- [ ] CI: remove the FFmpeg download step.
+- [x] Remove thumbnails with the gallery UI. This drops the swscale path.
+- [x] CI: remove the FFmpeg download step.
 
 **Done when** `git grep -i "avcodec\|avformat\|swscale\|swresample"` is empty
 and the release contains no FFmpeg.
 
 ## Phase 3 — Strip the extras
 
-- [ ] Remove `lockscreen_manager.*`. It changes the lock screen, turns off Spotlight
+- [x] Remove `lockscreen_manager.*`. It changes the lock screen, turns off Spotlight
       (ContentDeliveryManager keys), writes PersonalizationCSP / HKLM `OEMBackground`,
       and runs `ffmpeg.exe` behind the scenes.
-- [ ] Remove the `.scr` screensaver companion. It is a 1.5 MB duplicate of the exe.
-- [ ] Remove the `StartupDelayInMSec = 0` tweak. It changes start-up timing for
+- [x] Remove the `.scr` screensaver companion. It is a 1.5 MB duplicate of the exe.
+- [x] Remove the `StartupDelayInMSec = 0` tweak. It changes start-up timing for
       **every** app, not just this one. Autostart = a plain HKCU `Run` value only.
-- [ ] Drop mimalloc. It is overkill at this size, and the working-set trim needs no
+- [x] Drop mimalloc. It is overkill at this size, and the working-set trim needs no
       allocator swap.
-- [ ] Precompile `shaders/*.hlsl` with `fxc` at build time and embed the bytecode
-      as headers. That removes `D3DCompile` and `d3dcompiler_47.dll` (~4 MB RAM).
-- [ ] Make the loop crossfade opt-in, off by default. Seamless-loop clips don't need it,
+- [x] Replace the shader path with the system D3D11 video processor.
+      This removes `D3DCompile` and `d3dcompiler_47.dll` (~4 MB RAM).
+- [x] Remove the loop crossfade. Seamless-loop clips don't need it,
       and it saves a full-frame snapshot texture and a blend pass.
-- [ ] Drop `hardware_info` telemetry except what the governor needs.
+- [x] Drop `hardware_info` telemetry except what the governor needs.
 
 **Done when** the exe imports only system DLLs and the registry footprint is
 config plus an optional `Run` key.
 
 ## Phase 4 — Tray-first UI (drop ImGui)
 
-- [ ] Replace the ImGui control panel (`ui/settings_app.cpp`, ~4.4k lines) and the
+- [x] Replace the ImGui control panel (`ui/settings_app.cpp`, ~4.4k lines) and the
       Font Awesome TTF with a native tray menu:
   - Choose video… (`IFileOpenDialog`)
   - Pause / Resume
@@ -115,19 +113,19 @@ config plus an optional `Run` key.
   - Run at startup
   - Open config folder
   - Exit
-- [ ] Settings live in `%APPDATA%\LiteWallpaper-MF\config.json`.
+- [x] Settings live in `%APPDATA%\LiteWallpaper-MF\config.ini`.
       Consider replacing nlohmann/json with a tiny INI so the build has no vcpkg dependencies.
-- [ ] Multi-monitor: one video per monitor, or span. Keep it to "same video on all" first.
+- [x] Multi-monitor: span the same video across the WorkerW desktop first.
 
 **Done when** vcpkg is no longer needed and the exe is ≤ 1.5 MB.
 
 ## Phase 5 — Packaging and trust
 
-- [ ] Static CRT (`/MT`) → a single portable exe, with no VC++ runtime DLLs.
-- [ ] Release **only from CI** (`softprops/action-gh-release` on tag push).
+- [x] Static CRT (`/MT`) → a single portable exe, with no VC++ runtime DLLs.
+- [x] Release **only from CI** (`softprops/action-gh-release` on tag push).
       Never hand-upload assets. Publish the SHA-256 with each release.
-- [ ] Add build provenance attestation (`actions/attest-build-provenance`).
-- [ ] Update the README: what the fork changes, which codecs are needed, and how to uninstall
+- [x] Add build provenance attestation (`actions/attest-build-provenance`).
+- [x] Update the README: what the fork changes, which codecs are needed, and how to uninstall
       (delete the exe; remove the HKCU `Run` value if it was set).
 
 **Done when** a tagged release ships one exe built and attested by CI.
@@ -139,13 +137,12 @@ config plus an optional `Run` key.
 - Per-monitor videos, playlist / shuffle on a timer
 - Optional audio through WASAPI (Phase 2 note)
 - HDR passthrough (scRGB swap chain) for HDR clips
-- `--video <path>` CLI flag for scripting
 
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
 | VP9 / AV1 / Web Media extension missing (N editions, stripped installs) | Detect at open and show which Store extension to install. MP4/H.264 always works. |
-| Some drivers return BGRA instead of NV12 from the MF transform | Keep a BGRA fallback path in the presenter (pass-through shader). |
+| Some drivers return BGRA instead of NV12 from the MF transform | Fall back to BGRA and let the D3D11 video processor consume it directly. |
 | MF texture-array sample lifetime (frame recycled too early) | Hold the `IMFSample` until the next frame is presented. |
 | Windows build-specific WorkerW changes (24H2+) | Already handled upstream; re-test on every Windows feature update. |

@@ -1,0 +1,24 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Configure
+        run: cmake -B build -S . -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Enforce executable size budget
+        shell: pwsh
+        run: |
+          $size = (Get-Item "build/Release/LiteWallpaper-MF.exe").Length
+          if ($size -gt 1572864) { throw "Executable exceeds the 1.5 MB size budget: $size bytes" }

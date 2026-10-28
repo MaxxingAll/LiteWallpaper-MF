@@ -1,81 +1,46 @@
-﻿name: Build and Release
+name: Build and Release
 
 on:
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+    tags: ["v*"]
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Download & Setup FFmpeg SDK
+      - uses: microsoft/setup-msbuild@v2
+      - name: Configure
+        run: cmake -B build -S . -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Stage executable and checksum
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "third_party/ffmpeg"
-          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip" -OutFile "ffmpeg.zip"
-          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg-extracted"
-          $extractedDir = Get-ChildItem -Path "ffmpeg-extracted" -Directory | Select-Object -First 1
-          Copy-Item -Path "$($extractedDir.FullName)\*" -Destination "third_party/ffmpeg" -Recurse -Force
-
-      - name: Configure CMake
-        run: |
-          cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Release -DVCPKG_TARGET_TRIPLET=x64-windows
-
-      - name: Build MiniWallpaper
-        run: |
-          cmake --build build --config Release
-
-      - name: Package Portable Release
-        shell: pwsh
-        run: |
-          $ver = "${{ github.ref_name }}"
-          if (-not $ver -or $ver -eq "main") { $ver = "latest" }
-          New-Item -ItemType Directory -Force -Path "dist/MiniWallpaper-Portable/assets"
-          Copy-Item "build/Release/MiniWallpaper.exe" "dist/MiniWallpaper-Portable/" -Force
-          Copy-Item "build/Release/MiniWallpaper.scr" "dist/MiniWallpaper-Portable/" -Force
-          Copy-Item "build/Release/*.dll" "dist/MiniWallpaper-Portable/" -Force
-          # Copy only the FFmpeg runtime DLLs the app links against
-          # (skip avfilter/avdevice: +38 MB of dead weight in the release zip)
-          Get-ChildItem "third_party/ffmpeg/bin/*.dll" | Where-Object { $_.BaseName -notmatch '^av(filter|device)' } | Copy-Item -Destination "dist/MiniWallpaper-Portable/" -Force
-          Copy-Item "assets/*" "dist/MiniWallpaper-Portable/assets/" -Recurse -Force
-          Copy-Item "README.md" "dist/MiniWallpaper-Portable/" -Force
-          Copy-Item "LICENSE" "dist/MiniWallpaper-Portable/" -Force
-          # Bundle the VC++ runtime app-locally so the portable build also runs on
-          # machines without the Visual C++ Redistributable installed.
-          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          $vcCrt = $null
-          foreach ($vd in (Get-ChildItem "$vsPath\VC\Redist\MSVC" -Directory | Where-Object { $_.Name -match '^\d+\.\d+' } | Sort-Object { [version]$_.Name } -Descending)) {
-            $cand = Get-ChildItem (Join-Path $vd.FullName 'x64\Microsoft.VC*.CRT') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($cand) { $vcCrt = $cand; break }
-          }
-          if (-not $vcCrt) { throw 'VC++ runtime redist folder not found' }
-          foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
-            Copy-Item (Join-Path $vcCrt.FullName $dll) "dist/MiniWallpaper-Portable/" -Force
-          }
-          Compress-Archive -Path "dist/MiniWallpaper-Portable/*" -DestinationPath "MiniWallpaper-Portable-$ver-win64.zip" -Force
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+          Copy-Item "build/Release/LiteWallpaper-MF.exe" "LiteWallpaper-MF.exe"
+          $size = (Get-Item "LiteWallpaper-MF.exe").Length
+          if ($size -gt 1572864) { throw "Release executable exceeds the 1.5 MB size budget: $size bytes" }
+          $hash = (Get-FileHash "LiteWallpaper-MF.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  LiteWallpaper-MF.exe" | Set-Content -Encoding ascii "LiteWallpaper-MF.exe.sha256"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
         with:
-          files: MiniWallpaper-Portable-*.zip
-          generate_release_notes: false
+          subject-path: LiteWallpaper-MF.exe
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            LiteWallpaper-MF.exe
+            LiteWallpaper-MF.exe.sha256
+          generate_release_notes: true
           body: |
-            MiniWallpaper ${{ github.ref_name }} portable for Windows 64-bit.
+            Portable Windows 10/11 video wallpaper. No installer or bundled codec libraries.
 
-            How to use: extract the zip file, then run MiniWallpaper.exe. No installer needed.
-            Requires Windows 7 SP1 or newer.
+            H.264 is built into Windows. VP9, AV1, and HEVC files may require the corresponding Windows codec extensions.

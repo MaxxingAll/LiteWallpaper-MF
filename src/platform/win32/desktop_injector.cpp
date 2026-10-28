@@ -1,5 +1,4 @@
 #include "desktop_injector.h"
-#include <iostream>
 
 #define WM_APP_ATTACH (WM_APP + 11)
 
@@ -126,11 +125,8 @@ bool DesktopInjector::Attach(HWND renderHwnd) {
         renderHwnd,
         HWND_BOTTOM,
         0, 0, w, h,
-        SWP_NOACTIVATE | SWP_SHOWWINDOW
+        SWP_NOACTIVATE
     );
-
-    ShowWindow(renderHwnd, SW_SHOW);
-    UpdateWindow(renderHwnd);
     return true;
 }
 
@@ -172,25 +168,6 @@ bool DesktopInjector::IsTrueWorkerW() const {
 
 HWND DesktopInjector::GetWorkerW() const {
     return m_workerw;
-}
-
-std::vector<MonitorInfo> DesktopInjector::EnumerateMonitors() {
-    std::vector<MonitorInfo> monitors;
-    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR hmon, HDC, LPRECT, LPARAM lparam) -> BOOL {
-        auto* list = reinterpret_cast<std::vector<MonitorInfo>*>(lparam);
-        MONITORINFOEXW mi = {};
-        mi.cbSize = sizeof(mi);
-        if (GetMonitorInfoW(hmon, &mi)) {
-            MonitorInfo info;
-            info.handle = hmon;
-            info.rect = mi.rcMonitor;
-            info.device_id = mi.szDevice;
-            info.is_primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
-            list->push_back(info);
-        }
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&monitors));
-    return monitors;
 }
 
 LRESULT CALLBACK DesktopInjector::MsgReceiverWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {

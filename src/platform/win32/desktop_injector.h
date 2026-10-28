@@ -1,16 +1,7 @@
 #pragma once
 #include <windows.h>
-#include <vector>
-#include <string>
 
 namespace miniwp {
-
-struct MonitorInfo {
-    HMONITOR handle = nullptr;
-    RECT rect = {0, 0, 0, 0};     // Monitor rectangle in virtual screen coordinates
-    std::wstring device_id;        // Monitor device path
-    bool is_primary = false;
-};
 
 class DesktopInjector {
 public:
@@ -37,9 +28,6 @@ public:
 
     // Get WorkerW handle
     HWND GetWorkerW() const;
-    
-    // Enumerate active display monitors
-    static std::vector<MonitorInfo> EnumerateMonitors();
     
     // Register for Explorer restart notification ("TaskbarCreated")
     void RegisterExplorerRestart(HWND targetHwnd);

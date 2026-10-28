@@ -1,135 +1,49 @@
 #pragma once
-#include <d3d11.h>
-#include <dxgi.h>
-#include <dxgi1_2.h>
-#if __has_include(<dxgi1_3.h>)
-#include <dxgi1_3.h>
-#endif
-#if __has_include(<dxgi1_4.h>)
-#include <dxgi1_4.h>
-#endif
-#include <vector>
-#include <string>
-#include <wrl/client.h>
 
-using Microsoft::WRL::ComPtr;
+#include <d3d11.h>
+#include <dxgi1_3.h>
+#include <wrl/client.h>
+#include <vector>
 
 namespace miniwp {
 
-struct DisplayViewport {
-    float x = 0.0f;
-    float y = 0.0f;
-    float width = 0.0f;
-    float height = 0.0f;
-};
-
-// Process-wide shared D3D11 device (non-owning raw pointers).
-// The daemon creates the one and only device; the settings panel reuses it and
-// only creates its own swap chain on top. This saves a second device +
-// driver-side allocation (~2-4 MB private working set) while the panel is open.
-// Registered by D3D11Presenter::Init(), cleared by D3D11Presenter::Cleanup().
-ID3D11Device* GetSharedD3DDevice();
-ID3D11DeviceContext* GetSharedD3DDeviceContext();
-
 class D3D11Presenter {
 public:
-    D3D11Presenter();
     ~D3D11Presenter();
 
-    // Initialize D3D11 device and swap chain on target HWND (gpu_index: -1=CPU/Default, 0=GPU 1, 1=GPU 2, etc.)
-    bool Init(HWND hwnd, int width, int height, int gpu_index = 0);
-    
-    // Render NV12 texture to swap chain with scaling mode, target viewports, and smooth loop blend alpha (0.0f - 1.0f)
-    void RenderFrame(ID3D11Texture2D* nv12_texture, int array_index, int scaling_mode = 0, const std::vector<DisplayViewport>& target_viewports = {}, float blend_alpha = 0.0f);
-    
-    // Capture snapshot of the start frame for seamless crossfade looping
-    void CaptureStartFrame(ID3D11Texture2D* nv12_texture, int array_index);
-    void ResetStartFrame();
-
-    // Present frame to screen (syncInterval 0 for software pacing, 1 for monitor VSync)
-    HRESULT Present(UINT syncInterval = 0);
-
-    // Capture pixel-perfect RGB buffer directly from DirectX 11 Back Buffer
-    bool CaptureBackBufferRGB(std::vector<uint8_t>& outRgb, int& outWidth, int& outHeight);
-
-    // Capture pixel-perfect RGB JPEG snapshot directly from DirectX 11 Back Buffer
-    bool CaptureBackBufferAsJpg(const std::wstring& outputPath, int quality = 92);
-
-    // Frame latency waitable object (hardware vsync synchronization with zero CPU jitter)
-    HANDLE GetWaitableObject() const;
-    bool WaitForNextFrame(DWORD timeout_ms = 1000);
-
-    // Query live dedicated/shared video memory used by this process on the active adapter (in MB)
-    size_t GetVramUsageMB() const;
-
-    // Active adapter details
-    std::string GetAdapterName() const { return m_adapter_name; }
-    std::string GetAdapterType() const { return m_adapter_type; }
-    bool IsSoftwareMode() const { return m_is_software_mode; }
-    size_t GetAdapterDedicatedVramMB() const { return m_adapter_dedicated_mb; }
-    size_t GetAdapterSharedVramMB() const { return m_adapter_shared_mb; }
-
-    // Diagnostic: clear the swap chain to a solid color and present once.
-    void ClearAndPresent(float r, float g, float b);
-    
-    // Resize swap chain (when monitor resolution changes)
-    void Resize(int width, int height);
-    
-    // Get D3D11 device and context
-    ID3D11Device* GetDevice() const;
-    ID3D11DeviceContext* GetContext() const;
-    
-    // Flush GPU command queue
-    void Flush();
-
+    bool Init(HWND window, int width, int height);
+    bool RenderFrame(ID3D11Texture2D* texture, int array_index,
+                     int scaling_mode = 0);
+    HRESULT Present(UINT sync_interval = 0);
+    bool Resize(int width, int height);
+    void ReleaseFrameResources();
     void Cleanup();
 
+    ID3D11Device* GetDevice() const { return m_device.Get(); }
+    ID3D11DeviceContext* GetContext() const { return m_context.Get(); }
+    HANDLE GetWaitableObject() const { return m_frame_waitable; }
+
 private:
-    ComPtr<ID3D11Device>             m_device;
-    ComPtr<ID3D11DeviceContext>      m_context;
-    ComPtr<IDXGISwapChain>           m_swapchain;
-    ComPtr<ID3D11RenderTargetView>   m_rtv;
-    HANDLE                           m_frame_latency_waitable_object = nullptr;
-    
-    // NV12 -> RGB conversion resources
-    ComPtr<ID3D11PixelShader>        m_nv12_ps;
-    ComPtr<ID3D11VertexShader>       m_fullscreen_vs;
-    ComPtr<ID3D11SamplerState>       m_sampler;
-    ComPtr<ID3D11Buffer>             m_scaling_cb;
+    bool CreateSwapChain();
+    bool CreateVideoProcessor(UINT input_width, UINT input_height);
 
-    // Shader Resource Views on staging texture
-    ComPtr<ID3D11ShaderResourceView> m_srv_y;
-    ComPtr<ID3D11ShaderResourceView> m_srv_uv;
+    Microsoft::WRL::ComPtr<ID3D11Device> m_device;
+    Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_context;
+    Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swap_chain;
+    Microsoft::WRL::ComPtr<ID3D11VideoDevice> m_video_device;
+    Microsoft::WRL::ComPtr<ID3D11VideoContext> m_video_context;
+    Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator> m_enumerator;
+    Microsoft::WRL::ComPtr<ID3D11VideoProcessor> m_processor;
+    Microsoft::WRL::ComPtr<ID3D11VideoProcessorOutputView> m_output_view;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> m_input_texture;
+    std::vector<Microsoft::WRL::ComPtr<ID3D11VideoProcessorInputView>> m_input_views;
 
-    // GPU staging texture (single slice NV12 with SHADER_RESOURCE bind flag)
-    ComPtr<ID3D11Texture2D>          m_srv_texture;
-    UINT                             m_srv_width = 0;
-    UINT                             m_srv_height = 0;
-
-    // Start frame snapshot for auto smooth looping crossfade
-    ComPtr<ID3D11Texture2D>          m_start_texture;
-    ComPtr<ID3D11ShaderResourceView> m_start_srv_y;
-    ComPtr<ID3D11ShaderResourceView> m_start_srv_uv;
-    UINT                             m_start_width = 0;
-    UINT                             m_start_height = 0;
-
-    // Cached staging texture for backbuffer RGB snapshot (prevents VRAM churn)
-    ComPtr<ID3D11Texture2D>          m_capture_staging_texture;
-    UINT                             m_capture_width = 0;
-    UINT                             m_capture_height = 0;
-    
-    HWND m_hwnd = nullptr;
+    HWND m_window = nullptr;
+    HANDLE m_frame_waitable = nullptr;
     int m_width = 0;
     int m_height = 0;
-
-    std::string m_adapter_name = "Default GPU";
-    std::string m_adapter_type = "DirectX 11";
-    bool        m_is_software_mode = false;
-    size_t      m_adapter_dedicated_mb = 0;
-    size_t      m_adapter_shared_mb = 0;
-    
-    bool CreateShaders();
-    bool CreateSwapChain(HWND hwnd, int width, int height);
+    UINT m_input_width = 0;
+    UINT m_input_height = 0;
 };
 
 } // namespace miniwp

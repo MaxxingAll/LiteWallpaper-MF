@@ -8,7 +8,7 @@ struct ID3D11Device;
 namespace miniwp {
 
 struct VideoFrame {
-    ID3D11Texture2D* texture = nullptr;  // GPU texture (NV12 format in VRAM)
+    ID3D11Texture2D* texture = nullptr;  // GPU texture (normally NV12)
     int texture_index = 0;               // Array slice index inside texture array
     int64_t pts = 0;                     // Presentation timestamp (microseconds)
     int width = 0;
@@ -20,7 +20,6 @@ struct VideoInfo {
     int height = 0;
     double fps = 0.0;
     double duration_seconds = 0.0;
-    bool has_audio = false;
     std::string codec_name;
 };
 
@@ -29,11 +28,10 @@ public:
     virtual ~IVideoDecoder() = default;
     
     // Open video file. d3d_device is used for hardware decoding.
-    // max_width and max_height allow automatic downscaling of 4K/8K videos to match the monitor resolution.
-    virtual bool Open(const char* path, ID3D11Device* d3d_device, int max_width = 0, int max_height = 0) = 0;
+    virtual bool Open(const char* path, ID3D11Device* d3d_device) = 0;
     
     // Decode next frame. Returns true if a new frame is available.
-    // frame.texture contains the decoded NV12 texture in GPU VRAM.
+    // frame.texture contains the decoded texture in GPU VRAM.
     virtual bool DecodeNextFrame(VideoFrame& frame) = 0;
     
     // Seek to beginning of video for seamless looping
@@ -47,18 +45,10 @@ public:
     // Get video information
     virtual VideoInfo GetInfo() const = 0;
     
-    // Check if video has an audio stream
-    virtual bool HasAudio() const = 0;
-    
-    // Decode next audio samples (interleaved float, stereo 44100Hz)
-    // Returns number of samples decoded (0 if none available)
-    virtual int DecodeAudioSamples(float* buffer, int max_samples) = 0;
+    // Human-readable detail for the most recent decoder failure.
+    virtual std::string GetLastError() const { return {}; }
     
     virtual void Close() = 0;
-
-    // Release cached frames and flush codec buffers (partial release; the
-    // daemon's deep suspend now fully closes the decoder via Close() instead)
-    virtual void FlushBuffers() {}
 };
 
 } // namespace miniwp

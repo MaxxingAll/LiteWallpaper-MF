@@ -16,20 +16,11 @@ Release/
 *.suo
 *.sln.docstates
 
-# vcpkg
-vcpkg_installed/
-
-# Large Third-Party Downloads (FFmpeg binary distributions)
-third_party/ffmpeg/
-
 # System / Temp Files
 *.log
 *.tmp
 .DS_Store
 Thumbs.db
-
-# ImGui Runtime State
-imgui.ini
 
 # Internal Planning Documents
 BLUEPRINT.md
