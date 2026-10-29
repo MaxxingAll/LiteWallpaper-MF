@@ -131,15 +131,15 @@ bool DesktopInjector::Attach(HWND renderHwnd) {
 }
 
 void DesktopInjector::Detach() {
-    if (m_render_hwnd) {
+    if (IsWindow(m_render_hwnd)) {
         ShowWindow(m_render_hwnd, SW_HIDE);
         LONG_PTR style = GetWindowLongPtrW(m_render_hwnd, GWL_STYLE);
         style &= ~WS_CHILD;
         style |= WS_POPUP;
         SetWindowLongPtrW(m_render_hwnd, GWL_STYLE, style);
         SetParent(m_render_hwnd, nullptr);
-        m_render_hwnd = nullptr;
     }
+    m_render_hwnd = nullptr;
     m_workerw = nullptr;
     m_is_fallback = false;
 }

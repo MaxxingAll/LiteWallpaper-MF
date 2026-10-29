@@ -34,6 +34,7 @@ TrayIcon g_tray;
 PlaybackClock g_clock;
 
 HWND g_window = nullptr;
+HWND g_control = nullptr;
 VideoFrame g_frame;
 VideoInfo g_video_info;
 bool g_running = true;
@@ -45,6 +46,12 @@ double g_playback_seconds = 0.0;
 uint64_t g_decoded_frames = 0;
 double g_decode_accumulator = 0.0;
 ULONGLONG g_last_attach_attempt = 0;
+
+constexpr wchar_t kRenderClassName[] = L"LiteWallpaperMFWindow";
+constexpr wchar_t kControlClassName[] = L"LiteWallpaperMFControl";
+
+LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam,
+                            LPARAM lparam);
 
 std::wstring Utf8ToWide(const std::string& value) {
     if (value.empty()) return {};
@@ -124,6 +131,8 @@ int EffectiveFpsCap(PowerState state) {
 }
 
 bool OpenConfiguredVideo(double seek_seconds = 0.0) {
+    if (!g_window || !g_presenter.GetDevice()) return false;
+
     g_presenter.ReleaseFrameResources();
     g_frame = {};
     g_decoder.Close();
@@ -181,7 +190,7 @@ void LeaveSuspend() {
 }
 
 bool RenderNextFrame(PowerState power_state) {
-    if (!g_decoder_open) return false;
+    if (!g_window || !g_decoder_open) return false;
     const int cap = EffectiveFpsCap(power_state);
     if (g_clock.GetTargetFPS() != cap) g_clock.SetTargetFPS(cap);
     if (!g_clock.ShouldRenderFrame()) return false;
@@ -220,7 +229,7 @@ bool RenderNextFrame(PowerState power_state) {
     if (FAILED(g_presenter.Present(0))) return false;
     if (!g_has_presented_frame) {
         g_has_presented_frame = true;
-        ShowWindow(g_window, SW_SHOWNA);
+        if (g_window) ShowWindow(g_window, SW_SHOWNA);
     }
     return true;
 }
@@ -266,6 +275,36 @@ void ResizeToDesktop() {
     }
 }
 
+bool CreateRenderWindow() {
+    const int virtual_x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int virtual_y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int virtual_width = (std::max)(1, GetSystemMetrics(SM_CXVIRTUALSCREEN));
+    const int virtual_height = (std::max)(1, GetSystemMetrics(SM_CYVIRTUALSCREEN));
+    g_window = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kRenderClassName,
+        L"LiteWallpaper-MF", WS_POPUP, virtual_x, virtual_y, virtual_width,
+        virtual_height, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!g_window) return false;
+
+    if (!g_injector.Attach(g_window)) {
+        DestroyWindow(g_window);
+        return false;
+    }
+    ResizeToDesktop();
+    ShowWindow(g_window, SW_HIDE);
+
+    RECT client = {};
+    if (!GetClientRect(g_window, &client) ||
+        !g_presenter.Init(g_window, (std::max)(1L, client.right - client.left),
+                          (std::max)(1L, client.bottom - client.top))) {
+        g_presenter.Cleanup();
+        g_injector.Detach();
+        DestroyWindow(g_window);
+        return false;
+    }
+    return true;
+}
+
 void OnTrayAction(TrayAction action) {
     AppConfig& config = g_config.Get();
     switch (action) {
@@ -275,7 +314,7 @@ void OnTrayAction(TrayAction action) {
                 config.video_path = WideToUtf8(selected);
                 g_config.Save();
                 g_manual_paused = false;
-                if (!OpenConfiguredVideo()) {
+                if (g_window && !OpenConfiguredVideo()) {
                     g_has_presented_frame = false;
                     ShowWindow(g_window, SW_HIDE);
                 }
@@ -310,27 +349,36 @@ void OnTrayAction(TrayAction action) {
             break;
         }
         case TrayAction::OpenConfigFolder:
-            ShellExecuteW(g_window, L"open", Config::GetConfigDir().c_str(),
+            ShellExecuteW(g_control, L"open", Config::GetConfigDir().c_str(),
                           nullptr, nullptr, SW_SHOWNORMAL);
             break;
         case TrayAction::Exit:
-            g_running = false;
-            PostMessageW(g_window, WM_CLOSE, 0, 0);
+            PostMessageW(g_control, WM_CLOSE, 0, 0);
             break;
     }
     UpdateTrayState();
 }
 
-LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam,
-                            LPARAM lparam) {
+LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM, LPARAM) {
+    if (message == WM_DESTROY) {
+        if (window == g_window) g_window = nullptr;
+        return 0;
+    }
+    return DefWindowProcW(window, message, wparam, lparam);
+}
+
+LRESULT CALLBACK ControlProc(HWND window, UINT message, WPARAM wparam,
+                             LPARAM lparam) {
     if (message == WM_APP_TRAYICON) {
         g_tray.HandleMessage(lparam);
         return 0;
     }
     if (message == WM_APP_ATTACH) {
-        g_injector.Reattach(window);
-        ResizeToDesktop();
-        ShowWindow(window, g_has_presented_frame ? SW_SHOWNA : SW_HIDE);
+        if (g_window && g_injector.Reattach(g_window)) {
+            ResizeToDesktop();
+            ShowWindow(g_window, g_has_presented_frame ? SW_SHOWNA : SW_HIDE);
+        }
+        g_last_attach_attempt = 0;
         g_tray.Destroy();
         g_tray.Create(window, OnTrayAction);
         UpdateTrayState();
@@ -350,6 +398,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam,
             DestroyWindow(window);
             return 0;
         case WM_DESTROY:
+            if (window == g_control) g_control = nullptr;
             g_running = false;
             PostQuitMessage(0);
             return 0;
@@ -393,45 +442,43 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
     window_class.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(1));
     window_class.hIconSm = window_class.hIcon;
     window_class.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    window_class.lpszClassName = L"LiteWallpaperMFWindow";
+    window_class.lpszClassName = kRenderClassName;
     if (!RegisterClassExW(&window_class)) {
         CloseHandle(instance_mutex);
         if (uninitialize_com) CoUninitialize();
         return 1;
     }
 
-    const int virtual_x = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    const int virtual_y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    const int virtual_width = (std::max)(1, GetSystemMetrics(SM_CXVIRTUALSCREEN));
-    const int virtual_height = (std::max)(1, GetSystemMetrics(SM_CYVIRTUALSCREEN));
-    g_window = CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, window_class.lpszClassName,
-        L"LiteWallpaper-MF", WS_POPUP, virtual_x, virtual_y, virtual_width,
-        virtual_height, nullptr, nullptr, instance, nullptr);
-    if (!g_window) {
+    WNDCLASSEXW control_class = window_class;
+    control_class.lpfnWndProc = ControlProc;
+    control_class.lpszClassName = kControlClassName;
+    if (!RegisterClassExW(&control_class)) {
         CloseHandle(instance_mutex);
         if (uninitialize_com) CoUninitialize();
         return 1;
     }
 
-    g_injector.Attach(g_window);
-    g_injector.RegisterExplorerRestart(g_window);
-    ResizeToDesktop();
-    ShowWindow(g_window, SW_HIDE);
-    RECT client = {};
-    GetClientRect(g_window, &client);
-    if (!g_presenter.Init(g_window, (std::max)(1L, client.right),
-                          (std::max)(1L, client.bottom))) {
+    g_control = CreateWindowExW(
+        WS_EX_TOOLWINDOW, kControlClassName, L"LiteWallpaper-MF Control",
+        WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
+    if (!g_control) {
+        CloseHandle(instance_mutex);
+        if (uninitialize_com) CoUninitialize();
+        return 1;
+    }
+
+    if (!CreateRenderWindow()) {
         MessageBoxW(nullptr, L"Direct3D 11 video presentation is unavailable.",
                     L"LiteWallpaper-MF", MB_OK | MB_ICONERROR);
-        DestroyWindow(g_window);
+        DestroyWindow(g_control);
         CloseHandle(instance_mutex);
         if (uninitialize_com) CoUninitialize();
         return 1;
     }
 
-    g_governor.Init(g_window);
-    g_tray.Create(g_window, OnTrayAction);
+    g_injector.RegisterExplorerRestart(g_control);
+    g_governor.Init(g_control);
+    g_tray.Create(g_control, OnTrayAction);
     UpdateTrayState();
     if (!g_config.Get().video_path.empty()) OpenConfiguredVideo();
 
@@ -447,8 +494,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
         const ULONGLONG now = GetTickCount64();
         if (now - g_last_attach_attempt >= 5000) {
             g_last_attach_attempt = now;
-            if (!g_injector.IsAttachedValid() &&
-                g_injector.Reattach(g_window)) {
+            if (!g_window) {
+                g_presenter.ReleaseFrameResources();
+                g_frame = {};
+                g_decoder.Close();
+                g_decoder_open = false;
+                g_presenter.Cleanup();
+                g_injector.Detach();
+                g_has_presented_frame = false;
+                if (CreateRenderWindow() && !g_suspended) {
+                    OpenConfiguredVideo(g_playback_seconds);
+                }
+            } else if (!g_injector.IsAttachedValid() &&
+                       g_injector.Reattach(g_window)) {
                 ResizeToDesktop();
                 ShowWindow(g_window,
                            g_has_presented_frame ? SW_SHOWNA : SW_HIDE);
@@ -469,7 +527,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
         }
         if (g_suspended) LeaveSuspend();
 
-        if (g_decoder_open) {
+        if (g_window && g_decoder_open) {
             RenderNextFrame(power);
             DWORD wait_ms = (std::min)(16u, g_clock.GetSleepDurationMs());
             if (wait_ms == 0) wait_ms = 1;
@@ -498,6 +556,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
     }
     g_presenter.Cleanup();
     if (IsWindow(g_window)) DestroyWindow(g_window);
+    if (IsWindow(g_control)) DestroyWindow(g_control);
     ReleaseMutex(instance_mutex);
     CloseHandle(instance_mutex);
     if (uninitialize_com) CoUninitialize();
