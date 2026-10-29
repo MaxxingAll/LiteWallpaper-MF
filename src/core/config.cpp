@@ -56,6 +56,32 @@ bool EnsureDirectory(const std::wstring& path) {
            (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
+// The profile APIs only preserve Unicode when the INI already has a UTF-16LE
+// BOM. Save rewrites every setting, so replace a legacy ANSI file first.
+bool EnsureUnicodeIni(const std::wstring& path) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                              nullptr);
+    if (file != INVALID_HANDLE_VALUE) {
+        unsigned char bom[2] = {};
+        DWORD read = 0;
+        const bool unicode = ReadFile(file, bom, 2, &read, nullptr) && read == 2 &&
+                             bom[0] == 0xFF && bom[1] == 0xFE;
+        CloseHandle(file);
+        if (unicode) return true;
+        DeleteFileW(path.c_str());
+    }
+
+    file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                       FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    const unsigned char bom[2] = {0xFF, 0xFE};
+    DWORD written = 0;
+    const bool ok = WriteFile(file, bom, 2, &written, nullptr) && written == 2;
+    CloseHandle(file);
+    return ok;
+}
+
 } // namespace
 
 Config g_config;
@@ -100,6 +126,7 @@ bool Config::Save() const {
     if (!EnsureDirectory(dir)) return false;
 
     const std::wstring path = GetConfigFilePath();
+    if (!EnsureUnicodeIni(path)) return false;
     const std::wstring video = Utf8ToWide(m_config.video_path);
     bool ok = WritePrivateProfileStringW(L"settings", L"video", video.c_str(),
                                          path.c_str()) != FALSE;
