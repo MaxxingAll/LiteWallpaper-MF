@@ -38,15 +38,16 @@ bool ReadBool(const wchar_t* key, bool fallback, const std::wstring& path) {
                                  path.c_str()) != 0;
 }
 
-void WriteInt(const wchar_t* key, int value, const std::wstring& path) {
+bool WriteInt(const wchar_t* key, int value, const std::wstring& path) {
     wchar_t buffer[32] = {};
     swprintf_s(buffer, _countof(buffer), L"%d", value);
-    WritePrivateProfileStringW(L"settings", key, buffer, path.c_str());
+    return WritePrivateProfileStringW(L"settings", key, buffer,
+                                      path.c_str()) != FALSE;
 }
 
-void WriteBool(const wchar_t* key, bool value, const std::wstring& path) {
-    WritePrivateProfileStringW(L"settings", key, value ? L"1" : L"0",
-                               path.c_str());
+bool WriteBool(const wchar_t* key, bool value, const std::wstring& path) {
+    return WritePrivateProfileStringW(L"settings", key, value ? L"1" : L"0",
+                                      path.c_str()) != FALSE;
 }
 
 bool EnsureDirectory(const std::wstring& path) {
@@ -130,12 +131,16 @@ bool Config::Save() const {
     const std::wstring video = Utf8ToWide(m_config.video_path);
     bool ok = WritePrivateProfileStringW(L"settings", L"video", video.c_str(),
                                          path.c_str()) != FALSE;
-    WriteInt(L"scaling", m_config.scaling_mode, path);
-    WriteInt(L"fps", m_config.fps_cap, path);
-    WriteBool(L"pause_fullscreen", m_config.pause_on_fullscreen, path);
-    WriteBool(L"pause_maximized", m_config.pause_on_maximized, path);
-    WriteBool(L"pause_battery", m_config.pause_on_battery, path);
-    WriteBool(L"run_on_startup", m_config.run_on_startup, path);
+    if (!WriteInt(L"scaling", m_config.scaling_mode, path)) ok = false;
+    if (!WriteInt(L"fps", m_config.fps_cap, path)) ok = false;
+    if (!WriteBool(L"pause_fullscreen", m_config.pause_on_fullscreen, path)) {
+        ok = false;
+    }
+    if (!WriteBool(L"pause_maximized", m_config.pause_on_maximized, path)) {
+        ok = false;
+    }
+    if (!WriteBool(L"pause_battery", m_config.pause_on_battery, path)) ok = false;
+    if (!WriteBool(L"run_on_startup", m_config.run_on_startup, path)) ok = false;
     return ok;
 }
 
