@@ -359,7 +359,8 @@ void OnTrayAction(TrayAction action) {
     UpdateTrayState();
 }
 
-LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM, LPARAM) {
+LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam,
+                            LPARAM lparam) {
     if (message == WM_DESTROY) {
         if (window == g_window) g_window = nullptr;
         return 0;
