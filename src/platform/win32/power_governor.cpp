@@ -107,7 +107,7 @@ bool PowerGovernor::IsMaximizedAppRunning() const {
                       static_cast<int>(_countof(class_name)));
         if (wcscmp(class_name, L"Progman") == 0 ||
             wcscmp(class_name, L"WorkerW") == 0) {
-            return FALSE;
+            return TRUE;
         }
         if (IsAppWindow(candidate) && IsZoomed(candidate)) {
             *reinterpret_cast<bool*>(parameter) = true;
