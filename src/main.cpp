@@ -42,6 +42,7 @@ bool g_manual_paused = false;
 bool g_suspended = false;
 bool g_decoder_open = false;
 bool g_has_presented_frame = false;
+bool g_device_lost = false;
 double g_playback_seconds = 0.0;
 uint64_t g_decoded_frames = 0;
 double g_decode_accumulator = 0.0;
@@ -190,7 +191,7 @@ void LeaveSuspend() {
 }
 
 bool RenderNextFrame(PowerState power_state) {
-    if (!g_window || !g_decoder_open) return false;
+    if (!g_window || !g_decoder_open || g_device_lost) return false;
     const int cap = EffectiveFpsCap(power_state);
     if (g_clock.GetTargetFPS() != cap) g_clock.SetTargetFPS(cap);
     if (!g_clock.ShouldRenderFrame()) return false;
@@ -207,6 +208,11 @@ bool RenderNextFrame(PowerState power_state) {
         ++g_decoded_frames;
     }
     if (!decoded || !g_frame.texture) {
+        ID3D11Device* device = g_presenter.GetDevice();
+        if (device && device->GetDeviceRemovedReason() != S_OK) {
+            g_device_lost = true;
+            return false;
+        }
         if (!g_decoder.GetLastError().empty()) {
             ShowDecoderError("Video decoding failed.");
             g_decoder.Close();
@@ -224,9 +230,18 @@ bool RenderNextFrame(PowerState power_state) {
     }
     if (!g_presenter.RenderFrame(g_frame.texture, g_frame.texture_index,
                                  g_config.Get().scaling_mode)) {
+        ID3D11Device* device = g_presenter.GetDevice();
+        if (device && device->GetDeviceRemovedReason() != S_OK) {
+            g_device_lost = true;
+        }
         return false;
     }
-    if (FAILED(g_presenter.Present(0))) return false;
+    const HRESULT present_result = g_presenter.Present(0);
+    if (present_result == DXGI_ERROR_DEVICE_REMOVED ||
+        present_result == DXGI_ERROR_DEVICE_RESET) {
+        g_device_lost = true;
+    }
+    if (FAILED(present_result)) return false;
     if (!g_has_presented_frame) {
         g_has_presented_frame = true;
         if (g_window) ShowWindow(g_window, SW_SHOWNA);
@@ -275,6 +290,35 @@ void ResizeToDesktop() {
     }
 }
 
+bool RebuildGraphics(bool reopen_video) {
+    const double resume_seconds = g_playback_seconds;
+    g_presenter.ReleaseFrameResources();
+    g_frame = {};
+    g_decoder.Close();
+    g_decoder_open = false;
+    g_video_info = {};
+    g_presenter.Cleanup();
+    g_has_presented_frame = false;
+
+    if (!g_window) return false;
+    ShowWindow(g_window, SW_HIDE);
+
+    RECT client = {};
+    if (!GetClientRect(g_window, &client) ||
+        !g_presenter.Init(g_window, (std::max)(1L, client.right - client.left),
+                          (std::max)(1L, client.bottom - client.top))) {
+        g_device_lost = true;
+        return false;
+    }
+
+    g_device_lost = false;
+    if (reopen_video && !g_suspended &&
+        !g_config.Get().video_path.empty()) {
+        OpenConfiguredVideo(resume_seconds);
+    }
+    return true;
+}
+
 bool CreateRenderWindow() {
     const int virtual_x = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int virtual_y = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -292,16 +336,6 @@ bool CreateRenderWindow() {
     }
     ResizeToDesktop();
     ShowWindow(g_window, SW_HIDE);
-
-    RECT client = {};
-    if (!GetClientRect(g_window, &client) ||
-        !g_presenter.Init(g_window, (std::max)(1L, client.right - client.left),
-                          (std::max)(1L, client.bottom - client.top))) {
-        g_presenter.Cleanup();
-        g_injector.Detach();
-        DestroyWindow(g_window);
-        return false;
-    }
     return true;
 }
 
@@ -468,9 +502,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
         return 1;
     }
 
-    if (!CreateRenderWindow()) {
+    if (!CreateRenderWindow() || !RebuildGraphics(false)) {
         MessageBoxW(nullptr, L"Direct3D 11 video presentation is unavailable.",
                     L"LiteWallpaper-MF", MB_OK | MB_ICONERROR);
+        g_presenter.Cleanup();
+        g_injector.Detach();
+        if (IsWindow(g_window)) DestroyWindow(g_window);
         DestroyWindow(g_control);
         CloseHandle(instance_mutex);
         if (uninitialize_com) CoUninitialize();
@@ -496,16 +533,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
         if (now - g_last_attach_attempt >= 5000) {
             g_last_attach_attempt = now;
             if (!g_window) {
-                g_presenter.ReleaseFrameResources();
-                g_frame = {};
-                g_decoder.Close();
-                g_decoder_open = false;
-                g_presenter.Cleanup();
+                RebuildGraphics(false);
                 g_injector.Detach();
-                g_has_presented_frame = false;
-                if (CreateRenderWindow() && !g_suspended) {
-                    OpenConfiguredVideo(g_playback_seconds);
-                }
+                if (CreateRenderWindow()) RebuildGraphics(true);
+            } else if (g_device_lost) {
+                RebuildGraphics(true);
             } else if (!g_injector.IsAttachedValid() &&
                        g_injector.Reattach(g_window)) {
                 ResizeToDesktop();
@@ -528,7 +560,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
         }
         if (g_suspended) LeaveSuspend();
 
-        if (g_window && g_decoder_open) {
+        if (g_window && g_decoder_open && !g_device_lost) {
             RenderNextFrame(power);
             DWORD wait_ms = (std::min)(16u, g_clock.GetSleepDurationMs());
             if (wait_ms == 0) wait_ms = 1;
