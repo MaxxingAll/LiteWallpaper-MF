@@ -131,7 +131,7 @@ int EffectiveFpsCap(PowerState state) {
     return (std::max)(1, cap);
 }
 
-bool OpenConfiguredVideo(double seek_seconds = 0.0) {
+bool OpenConfiguredVideo(double seek_seconds = 0.0, bool show_error = true) {
     if (!g_window || !g_presenter.GetDevice()) return false;
 
     g_presenter.ReleaseFrameResources();
@@ -148,7 +148,7 @@ bool OpenConfiguredVideo(double seek_seconds = 0.0) {
         return false;
     }
     if (!g_decoder.Open(path.c_str(), g_presenter.GetDevice())) {
-        ShowDecoderError("Windows could not open this video.");
+        if (show_error) ShowDecoderError("Windows could not open this video.");
         return false;
     }
 
@@ -292,6 +292,7 @@ void ResizeToDesktop() {
 
 bool RebuildGraphics(bool reopen_video) {
     const double resume_seconds = g_playback_seconds;
+    const bool recovering_device = g_device_lost;
     g_presenter.ReleaseFrameResources();
     g_frame = {};
     g_decoder.Close();
@@ -314,9 +315,11 @@ bool RebuildGraphics(bool reopen_video) {
     g_device_lost = false;
     if (reopen_video && !g_suspended &&
         !g_config.Get().video_path.empty()) {
-        OpenConfiguredVideo(resume_seconds);
+        const bool reopened = OpenConfiguredVideo(resume_seconds,
+                                                  !recovering_device);
+        if (recovering_device && !reopened) g_device_lost = true;
     }
-    return true;
+    return !g_device_lost;
 }
 
 bool CreateRenderWindow() {
