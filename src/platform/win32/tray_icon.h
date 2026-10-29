@@ -1,6 +1,7 @@
 #pragma once
 
 #include <windows.h>
+#include <shellapi.h>
 
 #define WM_APP_TRAYICON (WM_APP + 1)
 

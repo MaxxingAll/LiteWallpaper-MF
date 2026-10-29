@@ -1,5 +1,6 @@
 #include "power_governor.h"
 
+#include <cstdlib>
 #include <dwmapi.h>
 #include <shellapi.h>
 
